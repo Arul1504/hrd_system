@@ -63,7 +63,10 @@ $projects = [
         'default_descriptions' => [
             "BASIC ALLOWANCE PERSONAL LOAN CSE & TL PERFORMANCE",
             "INCENTIVE PERSONAL LOAN CSE & TL PERFORMANCE",
-        ]
+        ],
+        'is_management_fee' => 'Y',
+        'is_ppn' => 'Y',
+        'is_pph' => 'N'
     ],
     'ALLO' => [
         'bank' => 'PT Allo Bank Indonesia Tbk',
@@ -75,7 +78,10 @@ $projects = [
         'default_descriptions' => [
             "PEMBAYARAN INSENTIF OFFLINE SALES PERFORMANCE",
             "PEMBAYARAN INSENTIF BUSINESS LEADER PERFORMANCE",
-        ]
+        ],
+        'is_management_fee' => 'N',
+        'is_ppn' => 'Y',
+        'is_pph' => 'Y'
     ],
     'CNAF' => [
         'bank' => 'PT CIMB Niaga Auto Finance',
@@ -86,7 +92,10 @@ $projects = [
         'person_up_title' => 'Finance & Accounting Head',
         'default_descriptions' => [
             "REWARD REFERRAL GET COLLECTION",
-        ]
+        ],
+        'is_management_fee' => 'N',
+        'is_ppn' => 'N',
+        'is_pph' => 'N'
     ],
     'BNI' => [
         'bank' => 'PT BNI Finance',
@@ -97,7 +106,10 @@ $projects = [
         'person_up_title' => 'Division Head',
         'default_descriptions' => [
             "INCENTIVE FIELD COLLECTOR PERFORMANCE",
-        ]
+        ],
+        'is_management_fee' => 'Y',
+        'is_ppn' => 'Y',
+        'is_pph' => 'Y'
     ],
     'NOBU' => [
         'bank' => 'PT Bank Nationalnobu Tbk',
@@ -108,7 +120,10 @@ $projects = [
         'person_up_title' => 'Finance Head',
         'default_descriptions' => [
             "INSENTIF SALES KPR PERFORMANCE",
-        ]
+        ],
+        'is_management_fee' => 'Y',
+        'is_ppn' => 'Y',
+        'is_pph' => 'Y'
     ],
     'SYARIAH' => [
         'bank' => 'PT Bank Mega Syariah',
@@ -119,7 +134,10 @@ $projects = [
         'person_up_title' => 'HR Operations',
         'default_descriptions' => [
             "INVOICE PKWT BANK MEGA SYARIAH PERIODE", // Periode akan diisi manual
-        ]
+        ],
+        'is_management_fee' => 'Y',
+        'is_ppn' => 'Y',
+        'is_pph' => 'N'
     ],
     'PEI' => [
         'bank' => 'PT Pendanaan Efek Indonesia',
@@ -131,7 +149,10 @@ $projects = [
         'default_descriptions' => [
             "Biaya Gaji Karyawan Outsource PT Mandiri Andalan Utama",
             "Fee Management",
-        ]
+        ],
+        'is_management_fee' => 'Y',
+        'is_ppn' => 'Y',
+        'is_pph' => 'Y'
     ],
     'SMBC' => [
         'bank' => 'PT SMBC Indonesia',
@@ -142,7 +163,10 @@ $projects = [
         'person_up_title' => 'HR & GA Officer',
         'default_descriptions' => [
             "BIAYA GAJI PKWT RELATIONSHIP OFFICER PERIODE",
-        ]
+        ],
+        'is_management_fee' => 'Y',
+        'is_ppn' => 'Y',
+        'is_pph' => 'Y'
     ],
 ];
 
@@ -157,32 +181,70 @@ $default_project = $projects[$default_project_key] ?? null;
 $search_query = $_GET['search'] ?? '';
 
 // Contoh data statis untuk demonstrasi. Ganti dengan QUERY DATABASE Anda.
-$all_invoices = [
-    [
-        'id' => 1,
-        'invoice_number' => 'INV-202509-001',
-        'invoice_date' => '2025-09-23',
-        'employee_name' => 'Arul Rahmadan',
-        'total' => '5500000',
-        'status' => 'Sudah Dibayar'
-    ],
-    [
-        'id' => 2,
-        'invoice_number' => 'INV-202509-002',
-        'invoice_date' => '2025-09-24',
-        'employee_name' => 'Budi Santoso',
-        'total' => '6000000',
-        'status' => 'Belum Dibayar'
-    ],
-    [
-        'id' => 3,
-        'invoice_number' => 'INV-202509-003',
-        'invoice_date' => '2025-09-24',
-        'employee_name' => 'Citra Dewi',
-        'total' => '5850000',
-        'status' => 'Belum Dibayar'
-    ],
-];
+// $all_invoices = [
+//     [
+//         'id' => 1,
+//         'invoice_number' => 'INV-202509-001',
+//         'invoice_date' => '2025-09-23',
+//         'employee_name' => 'Arul Rahmadan',
+//         'total' => '5500000',
+//         'status' => 'Sudah Dibayar'
+//     ],
+//     [
+//         'id' => 2,
+//         'invoice_number' => 'INV-202509-002',
+//         'invoice_date' => '2025-09-24',
+//         'employee_name' => 'Budi Santoso',
+//         'total' => '6000000',
+//         'status' => 'Belum Dibayar'
+//     ],
+//     [
+//         'id' => 3,
+//         'invoice_number' => 'INV-202509-003',
+//         'invoice_date' => '2025-09-24',
+//         'employee_name' => 'Citra Dewi',
+//         'total' => '5850000',
+//         'status' => 'Belum Dibayar'
+//     ],
+// ];
+$sql_all_invoices = "SELECT 
+            id_invoice,
+            invoice_number,
+            invoice_date,
+            project_key,
+            bill_to_bank,
+            bill_to_address1,
+            bill_to_address2,
+            bill_to_address3,
+            person_up_name,
+            person_up_title,
+            sub_total,
+            mgmt_fee_percent,
+            mgmt_fee_amount,
+            ppn_percent,
+            ppn_amount,
+            grand_total,
+            transfer_bank,
+            transfer_account_no,
+            transfer_account_name,
+            footer_date,
+            manu_signatory_name,
+            manu_signatory_title,
+            status_pembayaran,
+            created_by_id,
+            created_at,
+            updated_at
+        FROM invoices
+        ORDER BY created_at DESC";
+
+$result = $conn->query($sql_all_invoices);
+
+$all_invoices = [];
+if ($result && $result->num_rows > 0) {
+    while ($row = $result->fetch_assoc()) {
+        $all_invoices[] = $row;
+    }
+}
 
 // Terapkan filter pencarian pada data statis
 $invoices = $all_invoices;
@@ -235,16 +297,15 @@ if (!empty($search_query)) {
         .status-label {
             padding: 5px 10px;
             border-radius: 5px;
-            color: #fff;
             font-weight: bold;
-            font-size: 0.8em;
+            font-size: 1em;
         }
 
         .status-label.sudahdibayar {
             background-color: #28a745;
         }
 
-        .status-label.belumbayar {
+        .status-label.belumdibayar {
             background-color: #ffc107;
         }
 
@@ -685,15 +746,14 @@ if (!empty($search_query)) {
                                 <tr>
                                     <td><?= e($invoice['invoice_number']) ?></td>
                                     <td><?= e(date('d F Y', strtotime($invoice['invoice_date']))) ?></td>
-                                    <td><?= e($invoice['employee_name']) ?></td>
-                                    <td>Rp <?= number_format($invoice['total'], 0, ',', '.') ?></td>
+                                    <td><?= e($invoice['person_up_name']) ?></td>
+                                    <td>Rp <?= number_format($invoice['grand_total'], 0, ',', '.') ?></td>
                                     <td>
                                         <?php
-                                        $status_class = strtolower(str_replace(' ', '', $invoice['status']));
-                                        $status_class = str_replace('belumbayar', 'pending', $status_class);
+                                        $status_class = strtolower(str_replace(' ', '', $invoice['status_pembayaran']));
                                         ?>
                                         <span class="status-label <?= e($status_class) ?>">
-                                            <?= e($invoice['status']) ?>
+                                            <?= e($invoice['status_pembayaran']) ?>
                                         </span>
                                     </td>
                                     <td class="action-buttons">
@@ -734,10 +794,16 @@ if (!empty($search_query)) {
                                 <select id="project-select" name="project" required>
                                     <option value="" disabled>-- Pilih Project --</option>
                                     <?php foreach ($projects as $key => $project): ?>
-                                        <option value="<?= e($key) ?>" <?= ($key === $default_project_key) ? 'selected' : '' ?>>
-                                            <?= e($key) ?>
-                                        </option>
-                                    <?php endforeach; ?>
+                                    <option 
+                                        value="<?= e($key) ?>"
+                                        data-is-ppn="<?= e($project['is_ppn']) ?>"
+                                        data-is-pph="<?= e($project['is_pph']) ?>"
+                                        data-is-management-fee="<?= e($project['is_management_fee']) ?>"
+                                        <?= ($key === $default_project_key) ? 'selected' : '' ?>
+                                    >
+                                        <?= e($key) ?>
+                                    </option>
+                                <?php endforeach; ?>
                                 </select>
                                 <br><br>
                                 <strong>BILL TO:</strong>
@@ -752,8 +818,8 @@ if (!empty($search_query)) {
                                         placeholder="Alamat 3" value="<?= e($default_project['address3'] ?? '') ?>"></p>
                             </div>
                             <div class="invoice-details">
-                                <p><span>No</span> : <input type="text" name="invoice_no" value=""
-                                        placeholder="Nomor Invoice" required></p>
+                                <p><span>No</span> : <input type="text" id="invoice_no" name="invoice_no" value=""
+                                        placeholder="Nomor Invoice" readonly></p>
                                 <p><span>Tanggal</span> : <input type="date" name="invoice_date"
                                         value="<?php echo date('Y-m-d'); ?>" required></p>
                             </div>
@@ -794,7 +860,7 @@ if (!empty($search_query)) {
                                         <td class="text-right"><span id="sub-total-display">Rp 0</span><input
                                                 type="hidden" name="sub_total" id="sub-total-input"></td>
                                     </tr>
-                                    <tr>
+                                    <tr id="row-management-fee">
                                         <td class="text-right"><strong>MANAGEMENT FEE (<input type="number"
                                                     name="management_fee_percentage"
                                                     id="management-fee-percentage-input" value="0" step="0.1"
@@ -803,13 +869,21 @@ if (!empty($search_query)) {
                                         <td><span id="management-fee-amount-display">Rp 0</span><input type="hidden"
                                                 name="management_fee_amount" id="management-fee-amount-input"></td>
                                     </tr>
-                                    <tr>
+                                    <tr id="row-ppn">
                                         <td class="text-right"><strong>PPN (<input type="number" name="ppn_percentage"
                                                     id="ppn-percentage-input" value="11" step="0.1"
                                                     style="width: 50px; text-align: right;"
                                                     oninput="calculateTotals()">%)</strong></td>
                                         <td><span id="ppn-amount-display">Rp 0</span><input type="hidden"
                                                 name="ppn_amount" id="ppn-amount-input"></td>
+                                    </tr>
+                                    <tr id="row-pph">
+                                        <td class="text-right"><strong>PPH (<input type="number" name="pph_percentage"
+                                                    id="pph-percentage-input" value="23" step="0.1"
+                                                    style="width: 50px; text-align: right;"
+                                                    oninput="calculateTotals()">%)</strong></td>
+                                        <td><span id="pph-amount-display">Rp 0</span><input type="hidden"
+                                                name="pph_amount" id="pph-amount-input"></td>
                                     </tr>
                                     <tr class="grand-total">
                                         <td class="text-right"><strong>GRAND TOTAL</strong></td>
@@ -865,7 +939,30 @@ if (!empty($search_query)) {
         // FUNGSI MODAL
         // =========================================================
         function openModal(modalId) {
+            const invoiceInput = document.getElementById("invoice_no");
+            invoiceInput.value = getNextInvoiceNumber();
             document.getElementById(modalId).style.display = 'block';
+        }
+
+        function getNextInvoiceNumber() {
+            const rows = document.querySelectorAll("tbody tr td:first-child");
+            const prefix = "INV";
+            const currentPeriod = new Date().toISOString().slice(0,7).replace("-", "");
+            let maxRunning = 0;
+
+            rows.forEach(td => {
+                const text = td.textContent.trim();
+                const parts = text.split("-");
+                if (parts.length === 3 && parts[1] === currentPeriod) {
+                    const num = parseInt(parts[2], 10);
+                    if (!isNaN(num) && num > maxRunning) {
+                        maxRunning = num;
+                    }
+                }
+            });
+
+            const newRunning = String(maxRunning + 1).padStart(3, "0");
+            return `${prefix}-${currentPeriod}-${newRunning}`;
         }
 
         function closeModal(modalId) {
@@ -1025,6 +1122,45 @@ if (!empty($search_query)) {
 
             // 2. Panggil fungsi untuk mengisi form dan item awal
             updateProjectDetails();
+
+            const projectSelect = document.getElementById("project-select");
+            
+            const rowPPN = document.getElementById("row-ppn");
+            const rowPPH = document.getElementById("row-pph");
+            const rowManagementFee = document.getElementById("row-management-fee");
+
+            function toggleRows() {
+                const selectedOption = projectSelect.options[projectSelect.selectedIndex];
+                const isPPN = selectedOption.getAttribute("data-is-ppn");
+                const isPPH = selectedOption.getAttribute("data-is-pph");
+                const isManagementFee = selectedOption.getAttribute("data-is-management-fee");
+
+                rowPPN.style.display = (isPPN === "Y") ? "table-row" : "none";
+                rowPPH.style.display = (isPPH === "Y") ? "table-row" : "none";
+                rowManagementFee.style.display = (isManagementFee === "Y") ? "table-row" : "none";
+
+                if (isPPN !== "Y") {
+                    document.getElementById("ppn-percentage-input").value = 0;
+                    document.getElementById("ppn-amount-input").value = 0;
+                    document.getElementById("ppn-amount-display").textContent = "Rp 0";
+                }
+                if (isPPH !== "Y") {
+                    document.getElementById("pph-percentage-input").value = 0;
+                    document.getElementById("pph-amount-input").value = 0;
+                    document.getElementById("pph-amount-display").textContent = "Rp 0";
+                }
+                if (isManagementFee !== "Y") {
+                    document.getElementById("management-fee-percentage-input").value = 0;
+                    document.getElementById("management-fee-amount-input").value = 0;
+                    document.getElementById("management-fee-amount-display").textContent = "Rp 0";
+                }
+
+                calculateTotals();
+            }
+
+            projectSelect.addEventListener("change", toggleRows);
+
+            toggleRows();
         });
     </script>
 </body>
