@@ -8,7 +8,7 @@ require '../config.php';
 if (!function_exists('e')) {
     function e($value)
     {
-        return htmlspecialchars($value, ENT_QUOTES, 'UTF-8');
+        return htmlspecialchars((string)$value, ENT_QUOTES, 'UTF-8');
     }
 }
 
@@ -18,18 +18,45 @@ if (!isset($_SESSION['id_karyawan']) || !in_array($_SESSION['role'] ?? '', ['HRD
     exit();
 }
 
-// Ambil data karyawan aktif
-$q = "SELECT id_karyawan, nik_karyawan, nama_karyawan, jabatan, proyek
-      FROM karyawan
-      WHERE (status IS NULL OR status='' OR UPPER(status) <> 'TIDAK AKTIF')
-      ORDER BY nama_karyawan ASC";
-$employees = [];
-$res = $conn->query($q);
-if ($res) {
-    $employees = $res->fetch_all(MYSQLI_ASSOC);
+// --- LOGIKA FILTER PROYEK ---
+$filter_proyek = $_GET['proyek'] ?? ''; // Ambil filter dari URL
+
+// Ambil semua proyek unik untuk dropdown filter
+$all_proyek = [];
+$q_proyek = $conn->query("SELECT DISTINCT proyek FROM karyawan WHERE proyek IS NOT NULL AND proyek<>'' ORDER BY proyek ASC");
+if ($q_proyek) {
+    $all_proyek = $q_proyek->fetch_all(MYSQLI_ASSOC);
 }
 
-// Ambil data user dari sesi untuk sidebar
+// Ambil data karyawan aktif dengan filter
+$sql = "SELECT id_karyawan, nik_karyawan, nama_karyawan, jabatan, proyek
+      FROM karyawan
+      WHERE (status IS NULL OR status='' OR UPPER(status) <> 'TIDAK AKTIF')
+";
+
+$params = [];
+$types = '';
+
+if (!empty($filter_proyek)) {
+    $sql .= " AND proyek = ?";
+    $params[] = $filter_proyek;
+    $types .= 's';
+}
+
+$sql .= " ORDER BY nama_karyawan ASC";
+
+$employees = [];
+$stmt_employees = $conn->prepare($sql);
+if ($stmt_employees) {
+    if ($params) $stmt_employees->bind_param($types, ...$params);
+    $stmt_employees->execute();
+    $res = $stmt_employees->get_result();
+    $employees = $res->fetch_all(MYSQLI_ASSOC);
+    $stmt_employees->close();
+}
+
+
+// --- DATA ADMIN SIDEBAR ---
 $id_karyawan_admin = $_SESSION['id_karyawan'];
 $nama_user_admin = $_SESSION['nama'];
 $role_user_admin = $_SESSION['role'];
@@ -54,10 +81,7 @@ if ($stmt_admin_info) {
     $stmt_admin_info->close();
 }
 
-// Tutup koneksi setelah semua operasi database selesai
-$conn->close();
-
-// Komponen payslip (gabungan unik)
+// --- DEFINISI KOMPONEN PAYSLIP ---
 $KOMPONEN = [
     "Gaji Pokok", "Rapel Gaji Bulan Sebelumnya", "Tunjangan Kesehatan", "Tunjangan Kehadiran",
     "Tunjangan Komunikasi", "Tunjangan Transportasi", "Tunjangan Jabatan", "Incentive",
@@ -70,6 +94,9 @@ $POTONGAN = [
     "Total tax (PPh21)", "BPJS Kesehatan", "BPJS Ketenagakerjaan", "Dana Pensiun",
     "Keterlambatan Kehadiran", "Potongan Lainnya", "Potongan Loan (Mobil/Motor/Lainnya/SPPI)"
 ];
+
+// Tutup koneksi setelah semua operasi database selesai
+$conn->close();
 ?>
 <!doctype html>
 <html lang="id">
@@ -89,7 +116,8 @@ $POTONGAN = [
             background: #fff;
             border: 1px solid #e5e7eb;
             border-radius: 12px;
-            padding: 14px
+            padding: 14px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
         }
 
         h1 {
@@ -103,10 +131,10 @@ $POTONGAN = [
         }
 
         select,
-        input {
+        input[type="number"] {
             padding: 10px;
             border: 1px solid #e5e7eb;
-            border-radius: 10px
+            border-radius: 10px;
         }
 
         table {
@@ -125,27 +153,35 @@ $POTONGAN = [
             padding: 8px 12px;
             border-radius: 8px;
             border: none;
-            cursor: pointer
+            cursor: pointer;
+            transition: background 0.2s;
         }
 
-        .btn.primary {
-            background: #2563eb;
-            color: #fff
+        .btn.action-icon {
+            padding: 8px;
+            width: 36px;
+            height: 36px;
+            display: inline-flex;
+            justify-content: center;
+            align-items: center;
+            margin-right: 5px;
         }
 
-        .btn.info {
-            background: #0ea5e9;
-            color: #fff
+        .btn.edit-icon {
+            background: #ffc107;
+            color: #333;
         }
+        .btn.edit-icon:hover { background: #e0a800; }
 
+        .btn.view-icon {
+            background: #0d6efd;
+            color: #fff;
+        }
+        .btn.view-icon:hover { background: #0b5ed7; }
+        
+        /* Hapus tombol unduh dari aksi */
         .btn.success {
-            background: #16a34a;
-            color: #fff
-        }
-
-        .btn[disabled] {
-            opacity: .5;
-            cursor: not-allowed
+            display: none; 
         }
 
         .pill {
@@ -204,15 +240,30 @@ $POTONGAN = [
                 grid-template-columns: 1fr
             }
         }
+        
+        .filter-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
 
+        .filter-header .left,
+        .filter-header .right {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-top: 8px;
+        }
         .sidebar-nav .dropdown-trigger {
-            position: relative;
+            position: relative
         }
 
         .sidebar-nav .dropdown-link {
             display: flex;
             justify-content: space-between;
-            align-items: center;
+            align-items: center
         }
 
         .sidebar-nav .dropdown-menu {
@@ -221,14 +272,14 @@ $POTONGAN = [
             top: 100%;
             left: 0;
             min-width: 200px;
-            background-color: #2c3e50;
-            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+            background: #2c3e50;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, .2);
             padding: 0;
             margin: 0;
             list-style: none;
-            z-index: 1000;
+            z-index: 11;
             border-radius: 0 0 8px 8px;
-            overflow: hidden;
+            overflow: hidden
         }
 
         .sidebar-nav .dropdown-menu li a {
@@ -236,41 +287,15 @@ $POTONGAN = [
             display: block;
             color: #ecf0f1;
             text-decoration: none;
-            transition: background-color 0.3s;
+            transition: background-color .3s
         }
 
         .sidebar-nav .dropdown-menu li a:hover {
-            background-color: #34495e;
+            background: #34495e
         }
 
         .sidebar-nav .dropdown-trigger:hover .dropdown-menu {
-            display: block;
-        }
-
-        .badge {
-            background: #ef4444;
-            color: #fff;
-            padding: 2px 8px;
-            border-radius: 999px;
-            font-size: 12px;
-        }
-
-        .filter-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 20px;
-        }
-
-        .filter-header .left,
-        .filter-header .right {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-
-        .button-view, .button-download {
-            margin-left: 10px;
+            display: block
         }
     </style>
 </head>
@@ -329,7 +354,19 @@ $POTONGAN = [
                 <div class="card">
                     <div class="filter-header">
                         <div class="left">
-                            <div class="pill">Pilih periode untuk aksi “Lihat/Unduh”</div>
+                            <form method="GET" action="e_payslip_hrd.php" style="display:flex; gap:10px;">
+                                <select name="proyek" onchange="this.form.submit()">
+                                    <option value="">Filter Berdasarkan Proyek</option>
+                                    <?php foreach ($all_proyek as $p): ?>
+                                        <option value="<?= e($p['proyek']) ?>" <?= ($filter_proyek === $p['proyek']) ? 'selected' : ''; ?>>
+                                            <?= e($p['proyek']) ?>
+                                        </option>
+                                    <?php endforeach; ?>
+                                </select>
+                            </form>
+                        </div>
+                        <div class="right">
+                            <div class="pill">Periode Aksi:</div>
                             <select id="bulan">
                                 <?php
                                 $nama_bulan = [
@@ -343,7 +380,7 @@ $POTONGAN = [
                                     </option>
                                 <?php endfor; ?>
                             </select>
-                            <input type="number" id="tahun" value="<?= date('Y') ?>" min="2000" style="width:120px">
+                            <input type="number" id="tahun" value="<?= date('Y') ?>" min="2000" style="width:100px">
                         </div>
                     </div>
 
@@ -354,13 +391,13 @@ $POTONGAN = [
                                 <th>Nama</th>
                                 <th>Jabatan</th>
                                 <th>Proyek</th>
-                                <th style="width:310px">Aksi</th>
+                                <th style="width:120px">Aksi</th>
                             </tr>
                         </thead>
                         <tbody>
                             <?php if (empty($employees)): ?>
                                 <tr>
-                                    <td colspan="5" style="text-align:center">Tidak ada karyawan</td>
+                                    <td colspan="5" style="text-align:center">Tidak ada karyawan yang sesuai dengan filter.</td>
                                 </tr>
                             <?php else: foreach ($employees as $e): ?>
                                 <tr data-id="<?= (int)$e['id_karyawan'] ?>">
@@ -369,9 +406,14 @@ $POTONGAN = [
                                     <td><?= e($e['jabatan'] ?? '-') ?></td>
                                     <td><?= e($e['proyek'] ?? '-') ?></td>
                                     <td>
-                                        <button class="btn primary btn-input">Input / Update Slip</button>
-                                        <button class="btn info btn-view">Lihat</button>
-                                        <button class="btn success btn-download">Unduh PDF</button>
+                                        <!-- Tombol Aksi: Input/Update Slip (Ikon Edit) -->
+                                        <button class="btn action-icon edit-icon btn-input" title="Input / Update Slip">
+                                            <i class="fas fa-edit"></i>
+                                        </button>
+                                        <!-- Tombol Aksi: Lihat Slip (Ikon Mata) -->
+                                        <button class="btn action-icon view-icon btn-view" title="Lihat Slip Gaji">
+                                            <i class="fas fa-eye"></i>
+                                        </button>
                                     </td>
                                 </tr>
                             <?php endforeach; endif; ?>
@@ -388,7 +430,7 @@ $POTONGAN = [
                 <h3 id="m_title">Input Slip</h3>
                 <span class="close-btn" onclick="hideModal()">&times;</span>
             </header>
-            <form action="save_payroll.php" method="POST">
+            <form action="process_save_payroll.php" method="POST">
                 <div class="body grid-3">
                     <?php foreach ($KOMPONEN as $komponen): ?>
                         <div class="input-group">
@@ -430,8 +472,14 @@ $POTONGAN = [
             pot = 0;
         document.querySelectorAll('#modalInput .angka').forEach(i => {
             const v = parseInt(i.value || '0', 10) || 0;
-            if (POTONGAN.has(i.dataset.nama)) pot += v;
-            else pend += v;
+            const absoluteV = Math.abs(v); // Pastikan nilai yang dihitung positif
+            
+            if (POTONGAN.has(i.dataset.nama)) pot += absoluteV;
+            else pend += absoluteV;
+            
+            // Simpan kembali nilai di input sebagai nilai absolut, jika diperlukan, 
+            // agar perhitungan THP akurat (Potongan seharusnya diinput sebagai nilai positif/nol)
+            i.value = absoluteV; 
         });
         const thp = pend - pot;
         document.getElementById('t_pendapatan').textContent = fmt(pend);
@@ -474,15 +522,17 @@ $POTONGAN = [
         const tr = e.target.closest('tr[data-id]');
         if (!tr) return;
         const id = tr.getAttribute('data-id');
+        const nama_karyawan = tr.children[1].textContent; // Ambil nama dari kolom ke-2
         const { bulan, tahun } = getPeriode();
     
-        // OPEN INPUT
-        if (e.target.classList.contains('btn-input')) {
+        // OPEN INPUT (EDIT ICON)
+        if (e.target.closest('.btn-input')) {
             document.getElementById('f_id_karyawan').value = id;
             setFormPeriode();
             document.getElementById('m_title').textContent = `Input Slip (${nama_karyawan}) - Periode: ${bulan}/${tahun}`;
             
             // Fetch existing data if any
+            // Anda perlu menyediakan file get_payroll_data.php di backend
             const response = await fetch(`get_payroll_data.php?id_karyawan=${id}&bulan=${bulan}&tahun=${tahun}`);
             const data = await response.json();
             
@@ -503,22 +553,16 @@ $POTONGAN = [
             showModal();
         }
     
-        // VIEW
-        if (e.target.classList.contains('btn-view')) {
+        // VIEW (EYE ICON)
+        if (e.target.closest('.btn-view')) {
+            // Anda perlu menyediakan file get_payroll_id.php di backend
             const pid = await fetch(`get_payroll_id.php?id_karyawan=${id}&bulan=${bulan}&tahun=${tahun}`).then(r => r.json()).catch(() => null);
             if (!pid || !pid.id) {
-                return alert('Slip untuk periode ini belum ada. Silakan buat terlebih dahulu.');
+                // Gunakan notifikasi UI yang lebih baik daripada alert di lingkungan produksi
+                return alert('Slip untuk periode ini belum ada. Silakan buat/input terlebih dahulu.');
             }
-            window.open(`view_payroll.php?id=${pid.id}&bulan=${bulan}&tahun=${tahun}`, '_blank');
-        }
-    
-        // DOWNLOAD PDF
-        if (e.target.classList.contains('btn-download')) {
-            const pid = await fetch(`get_payroll_id.php?id_karyawan=${id}&bulan=${bulan}&tahun=${tahun}`).then(r => r.json()).catch(() => null);
-            if (!pid || !pid.id) {
-                return alert('Slip untuk periode ini belum ada. Silakan buat terlebih dahulu.');
-            }
-            window.location.href = `export_payroll_pdf.php?id=${pid.id}`;
+            // Arahkan ke view_payroll.php
+            window.open(`view_payroll.php?id=${pid.id}`, '_blank');
         }
     });
     </script>
