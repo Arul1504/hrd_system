@@ -681,6 +681,8 @@ if (!empty($search_query)) {
                     </li>
                     <li><a href="../monitoring_kontrak/monitoring_kontrak.php"><i class="fas fa-calendar-alt"></i>
                             Monitoring Kontrak</a></li>
+                    <li><a href="../monitoring_kontrak/surat_tugas_history.php"><i class="fas fa-file-alt"></i>
+                            Riwayat Surat Tugas</a></li>
                     <li><a href="../payslip/e_payslip_admin.php"><i class="fas fa-money-check-alt"></i> E-Pay Slip</a>
                     </li>
                     <li class="active"><a href="../invoice/invoice.php"><i class="fas fa-money-check-alt"></i>
@@ -694,6 +696,13 @@ if (!empty($search_query)) {
         </aside>
 
         <main class="main-content">
+            <?php if (isset($_GET['success']) && $_GET['success'] == 1): ?>
+                <div
+                    style="padding: 12px; background:#d4edda; color:#155724; border:1px solid #c3e6cb; border-radius:5px; margin-bottom:15px;">
+                    ✅ Invoice berhasil disimpan.
+                </div>
+            <?php endif; ?>
+
             <header class="main-header">
                 <h1>Kelola Invoice</h1>
                 <p class="current-date"><?= date('l, d F Y'); ?></p>
@@ -725,7 +734,7 @@ if (!empty($search_query)) {
 
             <div class="data-table-container card">
                 <h2>Daftar Invoice</h2>
-                <table class="invoice-table">
+                <table id="invoice-table" class="invoice-table">
                     <thead>
                         <tr>
                             <th>Nomor Invoice</th>
@@ -739,7 +748,8 @@ if (!empty($search_query)) {
                     <tbody>
                         <?php if (empty($invoices)): ?>
                             <tr>
-                                <td colspan="6" style="text-align:center;">Tidak ada data invoice yang ditemukan.</td>
+                                <td id="no-data-invoice" colspan="6" style="text-align:center;">Tidak ada data invoice yang
+                                    ditemukan.</td>
                             </tr>
                         <?php else:
                             foreach ($invoices as $invoice): ?>
@@ -794,16 +804,13 @@ if (!empty($search_query)) {
                                 <select id="project-select" name="project" required>
                                     <option value="" disabled>-- Pilih Project --</option>
                                     <?php foreach ($projects as $key => $project): ?>
-                                    <option 
-                                        value="<?= e($key) ?>"
-                                        data-is-ppn="<?= e($project['is_ppn']) ?>"
-                                        data-is-pph="<?= e($project['is_pph']) ?>"
-                                        data-is-management-fee="<?= e($project['is_management_fee']) ?>"
-                                        <?= ($key === $default_project_key) ? 'selected' : '' ?>
-                                    >
-                                        <?= e($key) ?>
-                                    </option>
-                                <?php endforeach; ?>
+                                        <option value="<?= e($key) ?>" data-is-ppn="<?= e($project['is_ppn']) ?>"
+                                            data-is-pph="<?= e($project['is_pph']) ?>"
+                                            data-is-management-fee="<?= e($project['is_management_fee']) ?>"
+                                            <?= ($key === $default_project_key) ? 'selected' : '' ?>>
+                                            <?= e($key) ?>
+                                        </option>
+                                    <?php endforeach; ?>
                                 </select>
                                 <br><br>
                                 <strong>BILL TO:</strong>
@@ -819,7 +826,8 @@ if (!empty($search_query)) {
                             </div>
                             <div class="invoice-details">
                                 <p><span>No</span> : <input type="text" id="invoice_no" name="invoice_no" value=""
-                                        placeholder="Nomor Invoice" readonly></p>
+                                        placeholder="Nomor Invoice" readonly>
+                                </p>
                                 <p><span>Tanggal</span> : <input type="date" name="invoice_date"
                                         value="<?php echo date('Y-m-d'); ?>" required></p>
                             </div>
@@ -939,31 +947,67 @@ if (!empty($search_query)) {
         // FUNGSI MODAL
         // =========================================================
         function openModal(modalId) {
+
             const invoiceInput = document.getElementById("invoice_no");
-            invoiceInput.value = getNextInvoiceNumber();
+            const nextNumber = getNextInvoiceNumber();
+            const nodata = document.getElementById("no-data-invoice")
+            if (!nodata) {
+                // Kalau ada nomor invoice hasil generate
+
+
+                // Kalau sudah ada value, set readonly
+                if (invoiceInput.value.trim() !== "") {
+                    invoiceInput.setAttribute("readonly", true);
+                }
+            } else {
+                // Kalau belum ada invoice sama sekali
+
+                invoiceInput.removeAttribute("readonly");
+            }
+            invoiceInput.value = nextNumber;
             document.getElementById(modalId).style.display = 'block';
         }
 
+
         function getNextInvoiceNumber() {
+
             const rows = document.querySelectorAll("tbody tr td:first-child");
-            const prefix = "INV";
-            const currentPeriod = new Date().toISOString().slice(0,7).replace("-", "");
+
+            // Kalau tidak ada data sama sekali, return null
+
+
+            // Daftar bulan ke angka Romawi
+            const romanMonths = ["I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X", "XI", "XII"];
+
+            const now = new Date();
+            const year = now.getFullYear();
+            const month = now.getMonth(); // 0 = Januari
+            const romanMonth = romanMonths[month];
+
             let maxRunning = 0;
 
             rows.forEach(td => {
                 const text = td.textContent.trim();
-                const parts = text.split("-");
-                if (parts.length === 3 && parts[1] === currentPeriod) {
-                    const num = parseInt(parts[2], 10);
-                    if (!isNaN(num) && num > maxRunning) {
-                        maxRunning = num;
+                // Format: 023/Inv/ManU/X/2025
+                const parts = text.split("/");
+                if (parts.length === 5) {
+                    const numberPart = parseInt(parts[0], 10);
+                    const monthPart = parts[3];
+                    const yearPart = parts[4];
+
+                    if (!isNaN(numberPart) && monthPart === romanMonth && yearPart == year) {
+                        if (numberPart > maxRunning) {
+                            maxRunning = numberPart;
+                        }
                     }
                 }
             });
 
             const newRunning = String(maxRunning + 1).padStart(3, "0");
-            return `${prefix}-${currentPeriod}-${newRunning}`;
+            return `${newRunning}/Inv/ManU/${romanMonth}/${year}`;
         }
+
+
 
         function closeModal(modalId) {
             document.getElementById(modalId).style.display = 'none';
@@ -1124,7 +1168,7 @@ if (!empty($search_query)) {
             updateProjectDetails();
 
             const projectSelect = document.getElementById("project-select");
-            
+
             const rowPPN = document.getElementById("row-ppn");
             const rowPPH = document.getElementById("row-pph");
             const rowManagementFee = document.getElementById("row-management-fee");

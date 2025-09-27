@@ -177,7 +177,14 @@ $total_pending = $result_pending_requests->fetch_assoc()['total_pending'] ?? 0;
                 transform: rotate(360deg);
             }
         }
-         .badge { background:#ef4444; color:#fff; padding:2px 8px; border-radius:999px; font-size:12px; }
+
+        .badge {
+            background: #ef4444;
+            color: #fff;
+            padding: 2px 8px;
+            border-radius: 999px;
+            font-size: 12px;
+        }
     </style>
 </head>
 
@@ -185,49 +192,53 @@ $total_pending = $result_pending_requests->fetch_assoc()['total_pending'] ?? 0;
     <div class="container">
         <aside class="sidebar">
             <div>
-               <div class="company-brand">
-                <img src="../image/manu.png" alt="Logo PT Mandiri Andalan Utama" class="company-logo">
-                <p class="company-name">PT Mandiri Andalan Utama</p>
-            </div>
-            <div class="user-info">
-                <div class="user-avatar"><?= e(strtoupper(substr($nama_user_admin, 0, 2))) ?></div>
-                <div class="user-details">
-                    <p class="user-name"><?= e($nama_user_admin) ?></p>
-                    <p class="user-id"><?= e($nik_user_admin) ?></p>
-                    <p class="user-role"><?= e($role_user_admin) ?></p>
+                <div class="company-brand">
+                    <img src="../image/manu.png" alt="Logo PT Mandiri Andalan Utama" class="company-logo">
+                    <p class="company-name">PT Mandiri Andalan Utama</p>
                 </div>
-            </div>
-            <nav class="sidebar-nav">
-                <ul>
-                    <li><a href="../dashboard_admin.php"><i class="fas fa-tachometer-alt"></i> Dashboard</a></li>
-                    <li><a href="../absensi/absensi.php"><i class="fas fa-edit"></i> Absensi </span></a></li>
-                    <li class="dropdown-trigger">
-                        <a href="#" class="dropdown-link"><i class="fas fa-users"></i> Data Karyawan <i
-                                class="fas fa-caret-down"></i></a>
-                        <ul class="dropdown-menu">
-                            <li><a href="../data_karyawan/all_employees.php">Semua Karyawan</a></li>
-                            <li><a href="../data_karyawan/karyawan_nonaktif.php">Non-Aktif</a></li>
-                        </ul>
-                    </li>
-                    <li class="dropdown-trigger">
-                        <a href="#" class="dropdown-link"><i class="fas fa-users"></i> Data Pengajuan<span class="badge"><?= $total_pending ?></span> <i
-                                class="fas fa-caret-down"></i></a>
-                        <ul class="dropdown-menu">
-                            <li><a href="../pengajuan/pengajuan.php">Pengajuan</a></li>
-                            <li class="active"><a href="#"> Kelola Pengajuan<span class="badge"><?= $total_pending ?></span></a></li>
-                        </ul>
-                    </li>
-                    
-                    <li><a href="../monitoring_kontrak/monitoring_kontrak.php"><i class="fas fa-calendar-alt"></i>
-                            Monitoring Kontrak</a></li>
-                    <li><a href="../payslip/e_payslip_admin.php"><i class="fas fa-money-check-alt"></i> E-Pay Slip</a>
-                    <li><a href="../invoice/invoice.php"><i class="fas fa-money-check-alt"></i> Invoice</a></li>
-                    </li>
-                </ul>
-            </nav>
-            <div class="logout-link">
-                <a href="../../logout.php"><i class="fas fa-sign-out-alt"></i> Keluar</a>
-            </div>
+                <div class="user-info">
+                    <div class="user-avatar"><?= e(strtoupper(substr($nama_user_admin, 0, 2))) ?></div>
+                    <div class="user-details">
+                        <p class="user-name"><?= e($nama_user_admin) ?></p>
+                        <p class="user-id"><?= e($nik_user_admin) ?></p>
+                        <p class="user-role"><?= e($role_user_admin) ?></p>
+                    </div>
+                </div>
+                <nav class="sidebar-nav">
+                    <ul>
+                        <li><a href="../dashboard_admin.php"><i class="fas fa-tachometer-alt"></i> Dashboard</a></li>
+                        <li><a href="../absensi/absensi.php"><i class="fas fa-edit"></i> Absensi </span></a></li>
+                        <li class="dropdown-trigger">
+                            <a href="#" class="dropdown-link"><i class="fas fa-users"></i> Data Karyawan <i
+                                    class="fas fa-caret-down"></i></a>
+                            <ul class="dropdown-menu">
+                                <li><a href="../data_karyawan/all_employees.php">Semua Karyawan</a></li>
+                                <li><a href="../data_karyawan/karyawan_nonaktif.php">Non-Aktif</a></li>
+                            </ul>
+                        </li>
+                        <li class="dropdown-trigger">
+                            <a href="#" class="dropdown-link"><i class="fas fa-users"></i> Data Pengajuan<span
+                                    class="badge"><?= $total_pending ?></span> <i class="fas fa-caret-down"></i></a>
+                            <ul class="dropdown-menu">
+                                <li><a href="../pengajuan/pengajuan.php">Pengajuan</a></li>
+                                <li class="active"><a href="#"> Kelola Pengajuan<span
+                                            class="badge"><?= $total_pending ?></span></a></li>
+                            </ul>
+                        </li>
+
+                        <li><a href="../monitoring_kontrak/monitoring_kontrak.php"><i class="fas fa-calendar-alt"></i>
+                                Monitoring Kontrak</a></li>
+                        <li><a href="../monitoring_kontrak/surat_tugas_history.php"><i class="fas fa-file-alt"></i>
+                                Riwayat Surat Tugas</a></li>
+                        <li><a href="../payslip/e_payslip_admin.php"><i class="fas fa-money-check-alt"></i> E-Pay
+                                Slip</a>
+                        <li><a href="../invoice/invoice.php"><i class="fas fa-money-check-alt"></i> Invoice</a></li>
+                        </li>
+                    </ul>
+                </nav>
+                <div class="logout-link">
+                    <a href="../../logout.php"><i class="fas fa-sign-out-alt"></i> Keluar</a>
+                </div>
         </aside>
 
         <main class="main-content">

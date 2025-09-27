@@ -48,18 +48,18 @@ if ($stmt_admin_info) {
 $nik_user_admin = $admin_info['nik_ktp'] ?? 'Tidak Ditemukan';
 $jabatan_user_admin = $admin_info['jabatan'] ?? 'Tidak Ditemukan';
 
-$sub_total        = isset($_POST['sub_total']) ? (float) $_POST['sub_total'] : 0.0;
+$sub_total = isset($_POST['sub_total']) ? (float) $_POST['sub_total'] : 0.0;
 $mgmt_fee_percent = isset($_POST['management_fee_percentage']) ? (float) $_POST['management_fee_percentage'] : 0.0;
-$mgmt_fee_amount  = isset($_POST['management_fee_amount']) ? (float) $_POST['management_fee_amount'] : 0.0;
-$ppn_percent      = isset($_POST['ppn_percentage']) ? (float) $_POST['ppn_percentage'] : 11.0;
-$ppn_amount       = isset($_POST['ppn_amount']) ? (float) $_POST['ppn_amount'] : 0.0;
-$grand_total      = isset($_POST['grand_total']) ? (float) $_POST['grand_total'] : 0.0;
+$mgmt_fee_amount = isset($_POST['management_fee_amount']) ? (float) $_POST['management_fee_amount'] : 0.0;
+$ppn_percent = isset($_POST['ppn_percentage']) ? (float) $_POST['ppn_percentage'] : 11.0;
+$ppn_amount = isset($_POST['ppn_amount']) ? (float) $_POST['ppn_amount'] : 0.0;
+$grand_total = isset($_POST['grand_total']) ? (float) $_POST['grand_total'] : 0.0;
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $conn->begin_transaction();
 
     try {
-       $stmt = $conn->prepare("
+        $stmt = $conn->prepare("
             INSERT INTO invoices 
             (invoice_number, invoice_date, project_key, bill_to_bank, bill_to_address1, bill_to_address2, bill_to_address3,
             person_up_name, person_up_title, sub_total, mgmt_fee_percent, mgmt_fee_amount, ppn_percent, ppn_amount, grand_total, 
@@ -91,7 +91,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $_POST['footer_date'],
             $_POST['manu_signatory_name'],
             $_POST['manu_signatory_title'],
-            $id_karyawan_admin 
+            $id_karyawan_admin
         );
 
 
@@ -118,7 +118,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         // --- 3. Commit transaction ---
         $conn->commit();
 
-        echo "Invoice berhasil disimpan dengan ID: " . $invoice_id;
+        // --- 3. Commit transaction ---
+
+
+        // Redirect balik dengan notifikasi sukses
+        header("Location: invoice.php?success=1");
+        exit();
+
 
     } catch (Exception $e) {
         $conn->rollback();

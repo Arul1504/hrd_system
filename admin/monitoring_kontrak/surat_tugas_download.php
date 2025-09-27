@@ -1,27 +1,27 @@
 <?php
 /**
- * File: surat_tugas_save.php
- * Fungsi: Menyimpan metadata surat tugas ke tabel `surat_tugas` dan mengalihkan kembali.
+ * File: surat_tugas_save.php (Versi HRD)
+ * Fungsi: Menyimpan metadata surat tugas ke tabel `surat_tugas`
+ *         Role akses: HRD
  */
 
 require '../config.php';
 if (session_status() === PHP_SESSION_NONE) session_start();
 
-// --- CEK SESSION (hanya ADMIN) ---
-if (!isset($_SESSION['id_karyawan']) || ($_SESSION['role'] ?? '') !== 'ADMIN') {
+// --- CEK SESSION (hanya HRD) ---
+if (!isset($_SESSION['id_karyawan']) || ($_SESSION['role'] ?? '') !== 'HRD') {
     header('Location: ../../index.php');
     exit();
 }
 
 // Helper
-
 function ymd($v){
     if(!$v) return null;
     $t = strtotime($v);
     return $t ? date('Y-m-d', $t) : null;
 }
 
-// Ambil input dari POST (karena akan dipanggil dari form di halaman view)
+// Ambil input dari POST
 $fields = [
     'id_karyawan','nama','proyek','posisi','penempatan','sales_code',
     'alamat_penempatan','tgl_pembuatan','no_surat'
@@ -40,13 +40,13 @@ $id_karyawan   = (int)$data['id_karyawan'];
 $no_surat      = $data['no_surat'];
 $tgl_pembuatan = ymd($data['tgl_pembuatan'] ?: date('Y-m-d'));
 
-// Lakukan koneksi dan pastikan tabel ada (aman diulang)
+// Pastikan tabel ada
 $conn->query("
 CREATE TABLE IF NOT EXISTS surat_tugas (
     id INT AUTO_INCREMENT PRIMARY KEY,
     id_karyawan INT NOT NULL,
     no_surat VARCHAR(128) NOT NULL,
-    file_path VARCHAR(255) NULL, /* Kolom ini akan diisi dengan path file PDF jika diunggah */
+    file_path VARCHAR(255) NULL,
     posisi VARCHAR(128) NULL,
     penempatan VARCHAR(128) NULL,
     sales_code VARCHAR(64) NULL,
@@ -57,8 +57,7 @@ CREATE TABLE IF NOT EXISTS surat_tugas (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
 ");
 
-// Upsert metadata
-// Kami asumsikan saat generate, file_path dikosongkan/null karena belum ada file fisik
+// Simpan / update data
 $up = $conn->prepare("
     INSERT INTO surat_tugas
         (id_karyawan, no_surat, file_path, posisi, penempatan, sales_code, alamat_penempatan, tgl_pembuatan)
@@ -85,11 +84,11 @@ $success = $up->execute();
 $up->close();
 
 if ($success) {
-    $_SESSION['flash_msg'] = "Data surat tugas **Nomor: {$no_surat}** berhasil disimpan. Silakan unduh/upload file fisiknya di Riwayat Surat Tugas.";
+    $_SESSION['flash_msg'] = "Data surat tugas **Nomor: {$no_surat}** berhasil disimpan.";
 } else {
     $_SESSION['flash_msg'] = "Gagal menyimpan data surat tugas: " . $conn->error;
 }
 
-// Redirect ke halaman riwayat atau monitoring
+// Redirect ke riwayat surat tugas (HRD)
 header('Location: surat_tugas_history.php');
 exit;

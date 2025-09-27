@@ -533,8 +533,14 @@ $conn->close();
             border-radius: 10px;
             font: inherit
         }
-         .badge { background:#ef4444; color:#fff; padding:2px 8px; border-radius:999px; font-size:12px; }
-    
+
+        .badge {
+            background: #ef4444;
+            color: #fff;
+            padding: 2px 8px;
+            border-radius: 999px;
+            font-size: 12px;
+        }
     </style>
 </head>
 
@@ -566,18 +572,21 @@ $conn->close();
                         </ul>
                     </li>
                     <li class="dropdown-trigger">
-                        <a href="#" class="dropdown-link"><i class="fas fa-users"></i> Data Pengajuan><span class="badge"><?= $total_pending ?></span><i
-                                class="fas fa-caret-down"></i></a>
+                        <a href="#" class="dropdown-link"><i class="fas fa-users"></i> Data Pengajuan><span
+                                class="badge"><?= $total_pending ?></span><i class="fas fa-caret-down"></i></a>
                         <ul class="dropdown-menu">
                             <li><a href="../pengajuan/pengajuan.php">Pengajuan</a></li>
-                            <li><a href="../pengajuan/kelola_pengajuan.php">Kelola Pengajuan<span class="badge"><?= $total_pending ?></span></a></li>
+                            <li><a href="../pengajuan/kelola_pengajuan.php">Kelola Pengajuan<span
+                                        class="badge"><?= $total_pending ?></span></a></li>
                         </ul>
                     </li>
                     <li><a href="../monitoring_kontrak/monitoring_kontrak.php"><i class="fas fa-calendar-alt"></i>
                             Monitoring Kontrak</a></li>
+                    <li><a href="../monitoring_kontrak/surat_tugas_history.php"><i class="fas fa-file-alt"></i>
+                            Riwayat Surat Tugas</a></li>
                     <li><a href="../payslip/e_payslip_admin.php"><i class="fas fa-money-check-alt"></i> E-Pay Slip</a>
                     </li>
-                     <li><a href="../invoice/invoice.php"><i class="fas fa-money-check-alt"></i> Invoice</a></li>
+                    <li><a href="../invoice/invoice.php"><i class="fas fa-money-check-alt"></i> Invoice</a></li>
                 </ul>
             </nav>
             <div class="logout-link">
