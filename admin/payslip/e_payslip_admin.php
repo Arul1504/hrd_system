@@ -30,7 +30,7 @@ if ($q_proyek) {
 }
 
 // Ambil data karyawan aktif dengan filter
-$sql = "SELECT id_karyawan, nik_karyawan, nama_karyawan, jabatan, proyek
+$sql = "SELECT id_karyawan, nik_ktp, nama_karyawan, jabatan, proyek
       FROM karyawan
       WHERE (status IS NULL OR status='' OR UPPER(status) <> 'TIDAK AKTIF')
 ";
@@ -85,6 +85,7 @@ if ($stmt_admin_info) {
 
 // --- DEFINISI KOMPONEN PAYSLIP ---
 $KOMPONEN = [
+    "Allowance",
     "Gaji Pokok",
     "Rapel Gaji Bulan Sebelumnya",
     "Tunjangan Kesehatan",
@@ -110,6 +111,7 @@ $KOMPONEN = [
     "Potongan Loan (Mobil/Motor/Lainnya/SPPI)"
 ];
 $POTONGAN = [
+    "Biaya Admin",
     "Total tax (PPh21)",
     "BPJS Kesehatan",
     "BPJS Ketenagakerjaan",
@@ -461,7 +463,7 @@ $conn->close();
 
         <main class="main-content">
             <header class="main-header">
-                <h1>E-Pay Slip (HRD)</h1>
+                <h1>E-Pay Slip (ADMIN))</h1>
                 <p class="current-date"><?= date('l, d F Y'); ?></p>
             </header>
 
@@ -469,7 +471,7 @@ $conn->close();
                 <div class="card">
                     <div class="filter-header">
                         <div class="left">
-                            <form method="GET" action="e_payslip_hrd.php" style="display:flex; gap:10px;">
+                            <form method="GET" action="e_payslip_admin.php" style="display:flex; gap:10px;">
                                 <select name="proyek" onchange="this.form.submit()">
                                     <option value="">Filter Berdasarkan Proyek</option>
                                     <?php foreach ($all_proyek as $p): ?>
@@ -527,7 +529,7 @@ $conn->close();
                             <?php else:
                                 foreach ($employees as $e): ?>
                                     <tr data-id="<?= (int) $e['id_karyawan'] ?>">
-                                        <td><?= e($e['nik_karyawan'] ?? '-') ?></td>
+                                        <td><?= e($e['nik_ktp'] ?? '-') ?></td>
                                         <td><?= e($e['nama_karyawan']) ?></td>
                                         <td><?= e($e['jabatan'] ?? '-') ?></td>
                                         <td><?= e($e['proyek'] ?? '-') ?></td>
