@@ -1,134 +1,199 @@
 <?php
-// ============= invoice.php (FINAL VERSION LENGKAP) =============
-// Menampilkan daftar invoice dan menyediakan form pembuatan invoice dalam modal
+// ============= save_invoice.php (FIXED) =============
 
 require_once __DIR__ . '/../config.php';
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
 
-// --- Helper untuk menghindari XSS (Wajib Didefinisikan) ---
-if (!function_exists('e')) {
-    function e($string)
-    {
-        // Menggunakan ENT_QUOTES untuk mengonversi single dan double quotes
-        return htmlspecialchars((string) $string, ENT_QUOTES, 'UTF-8');
-    }
-}
-
-// --- Akses hanya ADMIN ---
+// Wajib admin
 if (!isset($_SESSION['id_karyawan']) || (($_SESSION['role'] ?? '') !== 'ADMIN')) {
-    header('Location: ../login.php'); // sesuaikan jika perlu
+    header('Location: ../login.php');
     exit;
 }
 
-// Ambil data user dari sesi untuk sidebar
-$id_karyawan_admin = $_SESSION['id_karyawan'];
-$nama_user_admin = $_SESSION['nama'];
-$role_user_admin = $_SESSION['role'];
+mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT);
 
-// Ambil jumlah pending requests untuk sidebar (Diasumsikan query ini berfungsi)
-$sql_pending_requests = "SELECT COUNT(*) AS total_pending FROM pengajuan WHERE status_pengajuan = 'Menunggu'";
-$result_pending_requests = isset($conn) ? $conn->query($sql_pending_requests) : false;
-$total_pending = $result_pending_requests ? ($result_pending_requests->fetch_assoc()['total_pending'] ?? 0) : 0;
+// Helper
+function val($arr, $key, $default = null) { return isset($arr[$key]) ? $arr[$key] : $default; }
 
-// Ambil info admin untuk sidebar
-$stmt_admin_info = isset($conn) ? $conn->prepare("SELECT nik_ktp, jabatan FROM karyawan WHERE id_karyawan = ?") : false;
-
-if ($stmt_admin_info) {
-    $stmt_admin_info->bind_param("i", $id_karyawan_admin);
-    $stmt_admin_info->execute();
-    $result_admin_info = $stmt_admin_info->get_result();
-    $admin_info = $result_admin_info->fetch_assoc();
-    $stmt_admin_info->close();
-} else {
-    $admin_info = null;
+// ---- Util: ROMAWI bulan
+function romanMonth(int $m): string {
+    $r = ["I","II","III","IV","V","VI","VII","VIII","IX","X","XI","XII"];
+    return $r[max(1, min(12, $m)) - 1];
 }
 
-$nik_user_admin = $admin_info['nik_ktp'] ?? 'Tidak Ditemukan';
-$jabatan_user_admin = $admin_info['jabatan'] ?? 'Tidak Ditemukan';
+// ---- Generate nomor invoice (retry bila bentrok UNIQUE)
+function generateInvoiceNumberDb(mysqli $conn): string {
+    $now   = new DateTime('now');
+    $year  = $now->format('Y');
+    $roman = romanMonth((int)$now->format('n'));
 
-$sub_total = isset($_POST['sub_total']) ? (float) $_POST['sub_total'] : 0.0;
-$mgmt_fee_percent = isset($_POST['management_fee_percentage']) ? (float) $_POST['management_fee_percentage'] : 0.0;
-$mgmt_fee_amount = isset($_POST['management_fee_amount']) ? (float) $_POST['management_fee_amount'] : 0.0;
-$ppn_percent = isset($_POST['ppn_percentage']) ? (float) $_POST['ppn_percentage'] : 11.0;
-$ppn_amount = isset($_POST['ppn_amount']) ? (float) $_POST['ppn_amount'] : 0.0;
-$grand_total = isset($_POST['grand_total']) ? (float) $_POST['grand_total'] : 0.0;
+    // Ambil running max di bulan/tahun ini
+    $like = "%/$roman/$year";
+    $sql  = "SELECT MAX(CAST(SUBSTRING_INDEX(invoice_number, '/', 1) AS UNSIGNED)) AS max_run
+             FROM invoices
+             WHERE invoice_number LIKE ?";
+    $stmt = $conn->prepare($sql);
+    $stmt->bind_param("s", $like);
+    $stmt->execute();
+    $row = $stmt->get_result()->fetch_assoc();
+    $stmt->close();
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $conn->begin_transaction();
+    $running = (int)($row['max_run'] ?? 0);
+    $running++;
+    return str_pad((string)$running, 3, "0", STR_PAD_LEFT) . "/Inv/ManU/{$roman}/{$year}";
+}
 
-    try {
-        $stmt = $conn->prepare("
-            INSERT INTO invoices 
-            (invoice_number, invoice_date, project_key, bill_to_bank, bill_to_address1, bill_to_address2, bill_to_address3,
-            person_up_name, person_up_title, sub_total, mgmt_fee_percent, mgmt_fee_amount, ppn_percent, ppn_amount, grand_total, 
-            transfer_bank, transfer_account_no, transfer_account_name, footer_date, manu_signatory_name, manu_signatory_title, created_by_id)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-        ");
+// ---- Lookup project_id dari project_code (boleh NULL kalau tidak ada)
+function getProjectIdByCode(mysqli $conn, ?string $code): ?int {
+    if (!$code) return null;
+    $stmt = $conn->prepare("SELECT id FROM projects WHERE project_code = ? LIMIT 1");
+    $stmt->bind_param("s", $code);
+    $stmt->execute();
+    $row = $stmt->get_result()->fetch_assoc();
+    $stmt->close();
+    return $row ? (int)$row['id'] : null;
+}
 
+// Pastikan POST
+if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+    header('Location: invoice.php');
+    exit;
+}
 
-        $stmt->bind_param(
-            "sssssssssddddddssssssi",
-            $_POST['invoice_no'],
-            $_POST['invoice_date'],
-            $_POST['project'],
-            $_POST['bill_to_bank'],
-            $_POST['bill_to_address1'],
-            $_POST['bill_to_address2'],
-            $_POST['bill_to_address3'],
-            $_POST['person_up_name'],
-            $_POST['person_up_title'],
-            $sub_total,
-            $mgmt_fee_percent,
-            $mgmt_fee_amount,
-            $ppn_percent,
-            $ppn_amount,
-            $grand_total,
-            $_POST['transfer_bank'],
-            $_POST['transfer_account_no'],
-            $_POST['transfer_account_name'],
-            $_POST['footer_date'],
-            $_POST['manu_signatory_name'],
-            $_POST['manu_signatory_title'],
-            $id_karyawan_admin
+// Ambil data POST
+$invoice_date  = val($_POST, 'invoice_date');
+$project_code  = val($_POST, 'project_code');
+$bill_to_bank  = val($_POST, 'bill_to_bank');
+$addr1         = val($_POST, 'bill_to_address1');
+$addr2         = val($_POST, 'bill_to_address2');
+$addr3         = val($_POST, 'bill_to_address3');
+$up_name       = val($_POST, 'person_up_name');
+$up_title      = val($_POST, 'person_up_title');
+
+$sub_total     = (float)val($_POST, 'sub_total', 0);
+$mgmt_pct      = (float)val($_POST, 'management_fee_percentage', 0);
+$mgmt_amt      = (float)val($_POST, 'management_fee_amount', 0);
+$ppn_pct       = (float)val($_POST, 'ppn_percentage', 0);
+$ppn_amt       = (float)val($_POST, 'ppn_amount', 0);
+
+// pph tidak disimpan di DB, hanya mempengaruhi grand_total yang sudah dikirim
+$grand_total   = (float)val($_POST, 'grand_total', 0);
+
+$tf_bank       = val($_POST, 'transfer_bank');
+$tf_no         = val($_POST, 'transfer_account_no');
+$tf_name       = val($_POST, 'transfer_account_name');
+$footer_date   = val($_POST, 'footer_date');
+$sig_name      = val($_POST, 'manu_signatory_name');
+$sig_title     = val($_POST, 'manu_signatory_title');
+
+$descs         = isset($_POST['description']) && is_array($_POST['description']) ? $_POST['description'] : [];
+$amounts       = isset($_POST['amount']) && is_array($_POST['amount']) ? $_POST['amount'] : [];
+
+$created_by_id = (int)$_SESSION['id_karyawan'];
+
+// Mulai transaksi
+$conn->begin_transaction();
+
+try {
+    // Cari project_id
+    $project_id = getProjectIdByCode($conn, $project_code);
+
+    // Siapkan statement insert invoice
+    $sqlInv = "INSERT INTO invoices
+        (invoice_number, invoice_date, project_id, project_key, bill_to_bank, bill_to_address1, bill_to_address2, bill_to_address3,
+         person_up_name, person_up_title, sub_total, mgmt_fee_percent, mgmt_fee_amount, ppn_percent, ppn_amount, grand_total,
+         transfer_bank, transfer_account_no, transfer_account_name, footer_date, manu_signatory_name, manu_signatory_title, created_by_id)
+        VALUES (?,?,?,?,?,?,?,?,?, ?,?,?,?,?,?, ?,?,?,?,?,?, ?,?)";
+    $stmtInv = $conn->prepare($sqlInv);
+
+    // Tipe bind:
+    // 1-10 : ssisssssss
+    // 11-16: dddddd
+    // 17-22: ssssss
+    // 23   : i
+    $types = "ssisssssssddddddssssssi";
+
+    // Kita akan retry kalau bentrok UNIQUE (1062)
+    $maxRetry = 5;
+    $invoice_no = null;
+    for ($attempt = 1; $attempt <= $maxRetry; $attempt++) {
+        $invoice_no = generateInvoiceNumberDb($conn);
+        $stmtInv->bind_param(
+            $types,
+            $invoice_no,            // 1 s
+            $invoice_date,          // 2 s
+            $project_id,            // 3 i
+            $project_code,          // 4 s
+            $bill_to_bank,          // 5 s
+            $addr1,                 // 6 s
+            $addr2,                 // 7 s
+            $addr3,                 // 8 s
+            $up_name,               // 9 s
+            $up_title,              //10 s
+            $sub_total,             //11 d
+            $mgmt_pct,              //12 d
+            $mgmt_amt,              //13 d
+            $ppn_pct,               //14 d
+            $ppn_amt,               //15 d
+            $grand_total,           //16 d
+            $tf_bank,               //17 s
+            $tf_no,                 //18 s
+            $tf_name,               //19 s
+            $footer_date,           //20 s
+            $sig_name,              //21 s
+            $sig_title,             //22 s
+            $created_by_id          //23 i
         );
 
-
-        $stmt->execute();
-        $invoice_id = $stmt->insert_id;
-        $stmt->close();
-
-        // --- 2. Insert ke tabel invoice_description ---
-        if (!empty($_POST['items']) && is_array($_POST['items'])) {
-            $stmtItem = $conn->prepare("
-                INSERT INTO invoice_description (invoice_id, item_no, description, amount)
-                VALUES (?,?,?,?)
-            ");
-            foreach ($_POST['items'] as $index => $item) {
-                $item_no = $index + 1;
-                $desc = $item['description'];
-                $amount = $item['amount'];
-                $stmtItem->bind_param("iisd", $invoice_id, $item_no, $desc, $amount);
-                $stmtItem->execute();
+        try {
+            $stmtInv->execute();
+            break; // sukses
+        } catch (mysqli_sql_exception $e) {
+            // 1062 = duplicate key (kemungkinan invoice_number sama)
+            if ((int)$e->getCode() === 1062 && $attempt < $maxRetry) {
+                // retry dengan nomor baru
+                continue;
             }
-            $stmtItem->close();
+            throw $e; // lempar lagi kalau bukan 1062 atau sudah mentok
         }
-
-        // --- 3. Commit transaction ---
-        $conn->commit();
-
-        // --- 3. Commit transaction ---
-
-
-        // Redirect balik dengan notifikasi sukses
-        header("Location: invoice.php?success=1");
-        exit();
-
-
-    } catch (Exception $e) {
-        $conn->rollback();
-        echo "Error: " . $e->getMessage();
     }
+
+    $invoice_id = (int)$stmtInv->insert_id;
+    $stmtInv->close();
+
+    // ==== INSERT ITEMS ====
+    // Penting: JANGAN isi id_item (PK AUTO_INCREMENT). Isi ke kolom item_number!
+    // Struktur tabel & PK AUTO_INCREMENT terlihat di dump: PK di id_item, item_number hanyalah nomor urut. 
+    // (lihat file dump: definisi tabel + index + auto increment)
+    //  - CREATE TABLE `invoice_items` (...) id_item PK, item_number untuk urutan. :contentReference[oaicite:4]{index=4}
+    //  - PK & index: id_item primary. :contentReference[oaicite:5]{index=5}
+    //  - AUTO_INCREMENT untuk id_item. :contentReference[oaicite:6]{index=6}
+
+    if (!empty($descs)) {
+        $sqlItem = "INSERT INTO invoice_items (id_invoice, item_number, description, amount) VALUES (?, ?, ?, ?)";
+        $stmtItem = $conn->prepare($sqlItem);
+
+        foreach ($descs as $i => $desc) {
+            $num = $i + 1; // 1-based
+            $amt = (float)($amounts[$i] ?? 0);
+            $stmtItem->bind_param("iisd", $invoice_id, $num, $desc, $amt);
+            $stmtItem->execute();
+        }
+        $stmtItem->close();
+    }
+
+    $conn->commit();
+
+    // redirect sukses
+    header("Location: invoice.php?success=1");
+    exit;
+
+} catch (Throwable $e) {
+    $conn->rollback();
+    // untuk debug dev: echo pesan. Di produksi sebaiknya log saja.
+    http_response_code(500);
+    echo "Gagal menyimpan invoice: " . $e->getMessage();
+    exit;
 }
-?>

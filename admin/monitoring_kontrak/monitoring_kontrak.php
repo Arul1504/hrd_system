@@ -184,7 +184,7 @@ body {
 /* Table */
 .table-container {
     width: 100%;
-    overflow-x: auto;
+    overflow-x: visible; /* Ini bisa menyebabkan pemotongan */
     background: #fff;
     border-radius: 10px;
     box-shadow: 0 1px 4px rgba(0,0,0,0.06);
@@ -201,6 +201,7 @@ body {
     padding: 10px;
     text-align: left;
     white-space: nowrap;
+     position: relative; 
 }
 .table th {
     background: #f0f2f5;
@@ -255,12 +256,19 @@ body {
     justify-content: flex-end;
 }
 
-
-/* --- Aksi Dropdown Style --- */
-.action-dropdown {
-    position: relative;
-    display: inline-block;
+.action-buttons {
+    display: flex;
+    gap: 8px; /* Memberi jarak antar tombol */
+    flex-wrap: nowrap; /* Mencegah tombol turun ke baris baru */
+    align-items: center;
 }
+
+.action-buttons .btn.action-btn {
+    padding: 6px 10px; /* Atur padding yang lebih kecil agar tidak terlalu besar */
+    font-size: 13px;
+    white-space: nowrap; /* Mencegah teks terpotong */
+}
+
 
 .action-menu-trigger {
     background: #e0e0e0;
@@ -281,7 +289,8 @@ body {
 .action-menu {
     position: absolute;
     right: 0;
-    top: 100%;
+    /* Ganti 'top' dengan 'bottom' */
+    bottom: 100%; /* Ini yang membuat dropdown ke atas */
     z-index: 10;
     background: #fff;
     border: 1px solid #ddd;
@@ -290,8 +299,8 @@ body {
     box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
     list-style: none;
     padding: 0;
-    margin-top: 5px;
-    display: none; /* Default hidden */
+    margin-bottom: 5px; /* Memberi sedikit jarak */
+    display: none;
 }
 
 .action-menu.active {
@@ -484,28 +493,15 @@ body {
                             </td>
                             <td><span class="badge"><?= e($r['status']) ?></span></td>
                             <td>
-                                <div class="action-dropdown">
-                                    <button class="action-menu-trigger" onclick="toggleMenu(this)">
-                                        Aksi <i class="fas fa-caret-down"></i>
-                                    </button>
-                                    <ul class="action-menu">
-                                        <li>
-                                            <a href="#" onclick="event.preventDefault(); openPerpanjang(<?= (int)$r['id_karyawan'] ?>,'<?= e($r['nama_karyawan']) ?>','<?= e($r['proyek']) ?>'); toggleMenu(this.closest('.action-dropdown').querySelector('.action-menu-trigger'));">
-                                                <i class="fas fa-calendar-plus"></i> Perpanjang Kontrak
-                                            </a>
-                                        </li>
-                                        <li>
-                                            <a href="#" onclick="event.preventDefault(); openSurat(<?= (int)$r['id_karyawan'] ?>,'<?= e($r['nama_karyawan']) ?>','<?= e($r['proyek']) ?>','<?= e($r['jabatan']) ?>'); toggleMenu(this.closest('.action-dropdown').querySelector('.action-menu-trigger'));">
-                                                <i class="fas fa-file-signature"></i> Buat Surat Tugas
-                                            </a>
-                                        </li>
-                                        <li>
-                                            <a href="#" onclick="event.preventDefault(); openUpload(<?= (int)$r['id_karyawan'] ?>,'<?= e($r['nama_karyawan']) ?>','<?= e($r['proyek']) ?>'); toggleMenu(this.closest('.action-dropdown').querySelector('.action-menu-trigger'));">
-                                                <i class="fas fa-upload"></i> Upload Surat Tugas
-                                            </a>
-                                        </li>
-                                    </ul>
-                                </div>
+                                <div class="action-buttons">
+    <a href="#" class="btn action-btn" onclick="event.preventDefault(); openPerpanjang(<?= (int)$r['id_karyawan'] ?>,'<?= e($r['nama_karyawan']) ?>','<?= e($r['proyek']) ?>');">
+        <i class="fas fa-calendar-plus"></i> Perpanjang
+    </a>
+    <a href="#" class="btn action-btn" onclick="event.preventDefault(); openSurat(<?= (int)$r['id_karyawan'] ?>,'<?= e($r['nama_karyawan']) ?>','<?= e($r['proyek']) ?>','<?= e($r['jabatan']) ?>');">
+        <i class="fas fa-file-signature"></i> Surat Tugas
+    </a>
+    
+</div>
                             </td>
                         </tr>
                     <?php endforeach; endif; ?>
@@ -645,6 +641,36 @@ body {
 </div>
 
 <script>
+    
+   function repositionDropdown() {
+    const menus = document.querySelectorAll('.action-menu.active');
+    menus.forEach(menu => {
+        const rect = menu.getBoundingClientRect();
+        const viewportHeight = window.innerHeight;
+
+        // Reset posisi dulu
+        menu.classList.remove('dropup');
+        menu.style.removeProperty('top');
+        menu.style.removeProperty('bottom');
+
+        // kalau bagian bawah dropdown melebihi viewport, pakai dropup
+        if (rect.bottom > viewportHeight) {
+            menu.classList.add('dropup');
+        }
+    });
+}
+
+// Panggil fungsi reposisi saat dropdown dibuka
+document.querySelectorAll('.action-menu-trigger').forEach(trigger => {
+    trigger.addEventListener('click', () => {
+        // Tunggu sedikit agar menu muncul dan posisinya bisa dihitung
+        setTimeout(repositionDropdown, 0); 
+    });
+});
+
+// Panggil juga saat pengguna scroll atau resize jendela
+window.addEventListener('scroll', repositionDropdown);
+window.addEventListener('resize', repositionDropdown);
 // --- Dropdown Menu Logic ---
 function toggleMenu(trigger) {
     document.querySelectorAll('.action-menu.active').forEach(menu => {

@@ -165,7 +165,7 @@ while ($row = $result_total_jam->fetch_assoc()) {
     }
     if (isset($row['status_absensi']) && $row['status_absensi'] == 'Terlambat') {
         $jam_masuk_asli = strtotime($row['jam_masuk']);
-        $jam_normal = strtotime('08:00:00');
+        $jam_normal = strtotime('09:04:00');
         if ($jam_masuk_asli > $jam_normal) {
             $total_terlambat_detik += $jam_masuk_asli - $jam_normal;
         }

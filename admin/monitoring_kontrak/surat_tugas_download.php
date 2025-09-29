@@ -9,7 +9,7 @@ require '../config.php';
 if (session_status() === PHP_SESSION_NONE) session_start();
 
 // --- CEK SESSION (hanya HRD) ---
-if (!isset($_SESSION['id_karyawan']) || ($_SESSION['role'] ?? '') !== 'HRD') {
+if (!isset($_SESSION['id_karyawan']) || ($_SESSION['role'] ?? '') !== 'ADMIN') {
     header('Location: ../../index.php');
     exit();
 }

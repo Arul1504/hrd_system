@@ -155,6 +155,18 @@ $file_no_surat = preg_replace('/[^A-Za-z0-9-]+/', '-', $r['no_surat'] ?? 'tanpa-
             font-weight: bold;
         }
 
+        .ttd img.tanda-tangan {
+            width: 150px;
+            /* ukuran tanda tangan */
+            height: auto;
+            margin-bottom: -10px;
+            display: block;
+            margin-left: auto;
+            /* dorong ke kanan */
+            margin-right: 0;
+        }
+
+
         .ttd {
             margin-top: 40px;
             text-align: right;
@@ -163,7 +175,7 @@ $file_no_surat = preg_replace('/[^A-Za-z0-9-]+/', '-', $r['no_surat'] ?? 'tanpa-
 
         .ttd .nama-pemberi-tugas {
             font-weight: bold;
-            margin-top: 60px;
+            margin-top: 10px;
             border-bottom: 1px solid #000;
             padding-bottom: 3px;
             display: inline-block;
@@ -291,7 +303,13 @@ $file_no_surat = preg_replace('/[^A-Za-z0-9-]+/', '-', $r['no_surat'] ?? 'tanpa-
                     style="padding:8px 15px; background:#3498db; color:#fff; border:none; border-radius:5px; cursor:pointer;">
                     <i class="fas fa-download"></i> Unduh PDF
                 </button>
+                <button onclick="sendSuratAsEmail()" id="btnSendEmail"
+                    style="padding:8px 15px; background:#3498db; color:#fff; border:none; border-radius:5px; cursor:pointer;">
+                    <i class="fas fa-envelope"></i> Kirim Surat ke Email
+                </button>
             </div>
+            <div id="emailStatus" style="margin-top:10px; text-align:right; font-weight:bold;"></div>
+
 
             <div class="surat" id="surat-tugas-dokumen">
                 <div class="header">
@@ -350,10 +368,14 @@ $file_no_surat = preg_replace('/[^A-Za-z0-9-]+/', '-', $r['no_surat'] ?? 'tanpa-
                 <div class="ttd">
                     <p>Jakarta, <?= htmlspecialchars(formatDate($r['tgl_pembuatan'] ?? date('Y-m-d'))) ?></p>
                     <p><strong>PT Mandiri Andalan Utama</strong></p>
-                    <div style="margin-top: 80px;"></div>
-                    <p class="nama-pemberi-tugas">Oktafian Farhan</p>
-                    <p class="jabatan">Direktur Utama</p>
+
+                    <img src="../image/ttd.png" alt="Tanda Tangan Oktafian Farhan" class="tanda-tangan">
+
+                    <p class="nama-pemberi-tugas">Kutobburizal</p>
+                    <p class="jabatan">HR & Support Manager</p>
                 </div>
+
+
             </div>
         </main>
     </div>
@@ -364,6 +386,56 @@ $file_no_surat = preg_replace('/[^A-Za-z0-9-]+/', '-', $r['no_surat'] ?? 'tanpa-
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.9.3/html2pdf.bundle.min.js"></script>
     <script>
+        function sendSuratAsEmail() {
+            const element = document.getElementById('surat-tugas-dokumen');
+            const emailStatus = document.getElementById('emailStatus');
+            const btn = document.getElementById('btnSendEmail');
+            const originalText = btn.innerHTML;
+
+            if (!confirm("Kirim surat tugas ini ke email karyawan?")) return;
+
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Mengirim...';
+            emailStatus.innerHTML = '';
+
+            const opt = {
+                margin: [5, 5, 5, 5],
+                filename: 'Surat-Tugas.pdf',
+                image: { type: 'jpeg', quality: 0.9 },
+                html2canvas: { scale: 2, useCORS: true },
+                jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+            };
+
+            const worker = html2pdf().from(element).set(opt);
+
+            worker.output('blob').then(function (pdfBlob) {
+                const formData = new FormData();
+                formData.append('surat_pdf', pdfBlob, 'surat_tugas.pdf');
+                formData.append('id_surat', "<?= $r['id'] ?>");
+
+                fetch('send_surat_email.php', {
+                    method: 'POST',
+                    body: formData
+                })
+                    .then(res => res.text())
+                    .then(result => {
+                        if (result.includes("berhasil dikirim")) {
+                            emailStatus.innerHTML = '<span style="color: #27ae60;"><i class="fas fa-check-circle"></i> ' + result + '</span>';
+                            btn.style.backgroundColor = '#95a5a6';
+                        } else {
+                            emailStatus.innerHTML = '<span style="color: #c0392b;"><i class="fas fa-exclamation-triangle"></i> ' + result + '</span>';
+                            btn.disabled = false;
+                            btn.innerHTML = originalText;
+                        }
+                    })
+                    .catch(err => {
+                        console.error(err);
+                        emailStatus.innerHTML = '<span style="color: #c0392b;"><i class="fas fa-times-circle"></i> Terjadi kesalahan.</span>';
+                        btn.disabled = false;
+                        btn.innerHTML = originalText;
+                    });
+            });
+        }
         function downloadSuratAsPDF(fileNamePrefix) {
             const element = document.getElementById('surat-tugas-dokumen');
             const opt = {

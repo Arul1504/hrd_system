@@ -685,12 +685,7 @@ $conn->close();
                                                 data-proyek="<?= e($employee['proyek'] ?? '') ?>" title="Ubah"
                                                 onclick="openEditModal('<?= e($employee['id_karyawan']) ?>','<?= e($employee['proyek'] ?? '') ?>'); return false;"><i
                                                     class="fas fa-edit"></i></a>
-                                            <button type="button" class="action-btn upload-btn"
-                                                data-id="<?= e($employee['id_karyawan']) ?>"
-                                                data-nama="<?= e($employee['nama_karyawan']) ?>" title="Upload Surat Tugas"
-                                                onclick="openUploadModal('<?= e($employee['id_karyawan']) ?>', '<?= e($employee['nama_karyawan']) ?>')">
-                                                <i class="fas fa-file-upload"></i>
-                                            </button>
+                                            
                                             <button type="button" class="action-btn delete-btn"
                                                 data-id="<?= e($employee['id_karyawan']) ?>" title="Hapus"
                                                 onclick="confirmDelete('<?= e($employee['id_karyawan']) ?>')">
