@@ -32,7 +32,7 @@ function ucLabel(string $raw): string {
 
 // Kolom default jika tidak ada filter proyek yang spesifik
 $default_columns = [
-    "nik_karyawan", "nama_karyawan", "jabatan", "proyek", "status_karyawan", "status", "join_date", "tgl_resign"
+    "nik_ktp", "nama_karyawan", "jabatan", "proyek", "status_karyawan", "status", "join_date", "tgl_resign"
 ];
 $display_columns = $default_columns;
 

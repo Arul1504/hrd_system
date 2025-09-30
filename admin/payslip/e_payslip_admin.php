@@ -406,6 +406,13 @@ $conn->close();
             font-size: 16px;
             color: #000;
         }
+         .badge {
+            background: #ef4444;
+            color: #fff;
+            padding: 2px 8px;
+            border-radius: 999px;
+            font-size: 12px;
+        }
     </style>
 </head>
 

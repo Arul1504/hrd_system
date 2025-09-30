@@ -440,10 +440,7 @@ body {
                             <?php endforeach; ?>
                         </select>
                     </div>
-                    <div class="filter-box">
-                        <input type="number" name="due_in_days" min="1"
-                                value="<?= e($due_in_days) ?>" placeholder="Hari jatuh tempo">
-                    </div>
+                    
                     <div class="search-box">
                         <input type="text" name="s" placeholder="Cari nama/NIK" value="<?= e($search) ?>">
                         <button type="submit"><i class="fas fa-search"></i></button>

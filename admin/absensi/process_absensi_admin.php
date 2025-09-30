@@ -4,7 +4,7 @@
 // Menangani absen manual dan edit status absensi oleh admin
 // ===================================
 
-session_start();
+
 require '../config.php';
 // Fungsi helper untuk set timezone berdasarkan provinsi
 function set_timezone_from_province(string $province): string {
@@ -80,11 +80,11 @@ if ($action === 'absen_manual') {
     $jenis_absen = $_POST['jenis'] ?? '';
     $lokasi = $_POST['lokasi'] ?? '';
     
-    $stmt_nik = $conn->prepare("SELECT nik_karyawan FROM karyawan WHERE id_karyawan = ?");
+    $stmt_nik = $conn->prepare("SELECT nik_ktp FROM karyawan WHERE id_karyawan = ?");
     $stmt_nik->bind_param("i", $id_karyawan);
     $stmt_nik->execute();
     $result_nik = $stmt_nik->get_result();
-    $nik_karyawan_target = $result_nik->fetch_assoc()['nik_karyawan'] ?? NULL;
+    $nik_karyawan_target = $result_nik->fetch_assoc()['nik_ktp'] ?? NULL;
     $stmt_nik->close();
 
     if ($jenis_absen === 'masuk') {

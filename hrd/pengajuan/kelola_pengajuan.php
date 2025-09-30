@@ -210,6 +210,7 @@ $total_pending = $result_pending_requests->fetch_assoc()['total_pending'] ?? 0;
                     
                     <li><a href="../monitoring_kontrak/monitoring_kontrak.php"><i class="fas fa-calendar-alt"></i>
                             Monitoring Kontrak</a></li>
+                    <li><a href="../slipgaji/slipgaji.php"><i class="fas fa-money-check-alt"></i> Slip Gaji</a></li> 
                     </li>
                      
                 </ul>

@@ -286,8 +286,7 @@ $total_pending = $result_pending_requests->fetch_assoc()['total_pending'] ?? 0;
                                         $action_script = ($row['sumber_pengajuan'] === 'TANPA_LOGIN') ? 'process_pengajuan_external.php' : 'process_pengajuan.php';
                                         ?>
                                         <div style="display: flex; gap: 5px;">
-                                            <a href="process_pengajuan.php?action=view&id=<?= e($row['id_pengajuan']) ?>"
-                                                class="action-btn view-btn" title="Lihat Detail"><i class="fas fa-eye"></i></a>
+                                            
 
                                             <?php if (!empty($row['dokumen_pendukung'])): ?>
                                                 <a href="../../uploads/<?= e($row['dokumen_pendukung']) ?>"

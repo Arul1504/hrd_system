@@ -222,6 +222,7 @@ $conn->close();
                         </ul>
                     </li>
                     <li><a href="./monitoring_kontrak/monitoring_kontrak.php"><i class="fas fa-calendar-alt"></i> Monitoring Kontrak</a></li>
+                    <li><a href="./slipgaji/slipgaji.php"><i class="fas fa-calendar-alt"></i> Slip Gaji</a></li>
                 </ul>
             </nav>
             <div class="logout-link">

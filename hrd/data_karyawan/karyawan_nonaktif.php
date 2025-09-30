@@ -225,6 +225,7 @@ $all_jabatan     = $jabatan_result ? $jabatan_result->fetch_all(MYSQLI_ASSOC) : 
                         </ul>
                     </li>
                 <li><a href="../monitoring_kontrak/monitoring_kontrak.php"><i class="fas fa-calendar-alt"></i> Monitoring Kontrak</a></li>
+                <li><a href="../slipgaji/slipgaji.php"><i class="fas fa-money-check-alt"></i> Slip Gaji</a></li> 
             </ul>
         </nav>
 

@@ -501,7 +501,35 @@ $conn->close();
             </div>
 
             <div class="card">
-                <h2>Riwayat Absensi Karyawan Proyek Internal</h2>
+               
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
+                    <h2>Riwayat Absensi Karyawan Proyek Internal</h2>
+                    <form method="GET" action="download_absensi_excel.php"
+                        style="display:flex; gap:10px; align-items:center;">
+                        <select name="bulan" required>
+                            <?php
+                            for ($m = 1; $m <= 12; $m++):
+                                $sel = (date('n') == $m) ? 'selected' : '';
+                                ?>
+                                <option value="<?= $m ?>" <?= $sel ?>><?= date('F', mktime(0, 0, 0, $m, 1)) ?></option>
+                            <?php endfor; ?>
+                        </select>
+                        <select name="tahun" required>
+                            <?php
+                            $tahun_now = date('Y');
+                            for ($y = $tahun_now; $y >= ($tahun_now - 5); $y--):
+                                $sel = ($tahun_now == $y) ? 'selected' : '';
+                                ?>
+                                <option value="<?= $y ?>" <?= $sel ?>><?= $y ?></option>
+                            <?php endfor; ?>
+                        </select>
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fas fa-file-excel"></i> Download Bulanan
+                        </button>
+                    </form>
+                </div>
+
+
                 <form method="GET" class="toolbar">
                     <input type="date" name="tanggal" value="<?= e($filter_tanggal) ?>" onchange="this.form.submit()">
                     <input type="text" name="search" placeholder="Cari Nama/NIK..." value="<?= e($search_query) ?>">

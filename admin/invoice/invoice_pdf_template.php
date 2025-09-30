@@ -22,17 +22,23 @@ $__logo = $LOGO_SRC ?: ($LOGO_FILE ?: $LOGO_URL);
   /* Reset kecil agar konsisten di Dompdf */
   * { box-sizing: border-box; }
   body { font-family: DejaVu Sans, sans-serif; font-size: 12px; color: #111; margin: 0; padding: 24px; }
-  .brand{ display:flex; gap:14px; align-items:center; border-bottom:3px solid #e31837; padding-bottom:8px; margin-bottom:12px; }
-  .brand img { height: 60px; }
-  .brand h1 { margin:0; color:#e31837; font-size:18px; font-weight:700; }
-  .brand p { margin:0; font-size:11px; }
+
+  /* ===== Header: gunakan tabel agar stabil di Dompdf ===== */
+  .brand-table { width:100%; border-collapse:collapse; border-bottom:3px solid #e31837; margin-bottom:12px; }
+  .brand-table td { vertical-align:top; padding:0; }
+  .brand-logo { width:70px; }
+  .brand-logo img { display:block; height:60px; }
+  .brand-info h1 { margin:0; color:#e31837; font-size:18px; font-weight:700; }
+  .brand-info p { margin:0; font-size:11px; }
   .muted { font-style: italic; }
 
   .tag { display:inline-block; background:#e31837; color:#fff; font-weight:700; padding:6px 10px; border-radius:4px; margin:10px 0; }
 
-  .head-row { width:100%; }
-  .col-left { width:58%; float:left; }
-  .col-right{ width:38%; float:right; }
+  /* Bill-to & Info menggunakan tabel dua kolom untuk kestabilan */
+  .head-table { width:100%; border-collapse:collapse; margin-bottom:6px; }
+  .head-table td { vertical-align:top; padding:0; }
+  .head-left { width:58%; }
+  .head-right{ width:42%; }
 
   table.info { width:100%; border-collapse:collapse; font-size:12px; }
   table.info td { padding:3px 0; }
@@ -48,47 +54,53 @@ $__logo = $LOGO_SRC ?: ($LOGO_FILE ?: $LOGO_URL);
   table.summary tr:last-child td { background:#f3f3f3; font-weight:700; }
 
   .transfer p { margin:4px 0; font-size:12px; }
+
   .sign { width:100%; margin-top:24px; }
   .sign .date { text-align:right; }
   .sign .line { border-bottom:1px solid #000; display:inline-block; padding:0 60px; font-weight:700; margin-bottom:6px; }
   .sign .title { font-size:12px; }
-  .clearfix:after { content:""; display:block; clear:both; }
 </style>
 </head>
 <body>
 
-  <!-- Header / Brand -->
-  <div class="brand">
-    <img src="<?php echo e($__logo); ?>" alt="Logo">
-    <div>
-      <h1>PT. MANDIRI ANDALAN UTAMA</h1>
-      <p class="muted">Committed to delivered the best result</p>
-      <p>Jl Sultan Iskandar Muda No. 50 A-B</p>
-      <p>Kebayoran Lama Selatan - Kebayoran Lama Jakarta Selatan 12240</p>
-      <p>021-27518306 • www.manu.co.id</p>
-    </div>
-  </div>
+  <!-- ===== Header / Brand (logo kiri, teks kanan) ===== -->
+  <table class="brand-table">
+    <tr>
+      <td class="brand-logo">
+        <img src="<?php echo e($__logo); ?>" alt="Logo">
+      </td>
+      <td class="brand-info">
+        <h1>PT. MANDIRI ANDALAN UTAMA</h1>
+        <p class="muted">Committed to delivered the best result</p>
+        <p>Jl Sultan Iskandar Muda No. 50 A-B</p>
+        <p>Kebayoran Lama Selatan - Kebayoran Lama Jakarta Selatan 12240</p>
+        <p>021-27518306 • www.manu.co.id</p>
+      </td>
+    </tr>
+  </table>
 
   <div class="tag">BILL TO:</div>
 
-  <!-- Bill to + Info -->
-  <div class="head-row clearfix">
-    <div class="col-left">
-      <p><strong><?php echo e($invoice['bill_to_bank'] ?? ''); ?></strong></p>
-      <?php if(!empty($invoice['bill_to_address1'])): ?><p><?php echo e($invoice['bill_to_address1']); ?></p><?php endif; ?>
-      <?php if(!empty($invoice['bill_to_address2'])): ?><p><?php echo e($invoice['bill_to_address2']); ?></p><?php endif; ?>
-      <?php if(!empty($invoice['bill_to_address3'])): ?><p><?php echo e($invoice['bill_to_address3']); ?></p><?php endif; ?>
-    </div>
-    <div class="col-right">
-      <table class="info">
-        <tr><td class="label">No</td><td>:</td><td><?php echo e($invoice['invoice_number'] ?? ''); ?></td></tr>
-        <tr><td class="label">Tanggal</td><td>:</td><td><?php echo e(date('d/m/Y', strtotime($invoice['invoice_date'] ?? 'now'))); ?></td></tr>
-        <tr><td class="label">Up</td><td>:</td><td><?php echo e($invoice['person_up_name'] ?? ''); ?></td></tr>
-      </table>
-    </div>
-  </div>
+  <!-- ===== Bill to + Info ===== -->
+  <table class="head-table">
+    <tr>
+      <td class="head-left">
+        <p><strong><?php echo e($invoice['bill_to_bank'] ?? ''); ?></strong></p>
+        <?php if(!empty($invoice['bill_to_address1'])): ?><p><?php echo e($invoice['bill_to_address1']); ?></p><?php endif; ?>
+        <?php if(!empty($invoice['bill_to_address2'])): ?><p><?php echo e($invoice['bill_to_address2']); ?></p><?php endif; ?>
+        <?php if(!empty($invoice['bill_to_address3'])): ?><p><?php echo e($invoice['bill_to_address3']); ?></p><?php endif; ?>
+      </td>
+      <td class="head-right">
+        <table class="info">
+          <tr><td class="label">No</td><td>:</td><td><?php echo e($invoice['invoice_number'] ?? ''); ?></td></tr>
+          <tr><td class="label">Tanggal</td><td>:</td><td><?php echo e(date('d/m/Y', strtotime($invoice['invoice_date'] ?? 'now'))); ?></td></tr>
+          <tr><td class="label">Up</td><td>:</td><td><?php echo e($invoice['person_up_name'] ?? ''); ?></td></tr>
+        </table>
+      </td>
+    </tr>
+  </table>
 
-  <!-- Items -->
+  <!-- ===== Items ===== -->
   <table class="items">
     <thead>
       <tr>
@@ -110,7 +122,7 @@ $__logo = $LOGO_SRC ?: ($LOGO_FILE ?: $LOGO_URL);
     </tbody>
   </table>
 
-  <!-- Summary -->
+  <!-- ===== Summary ===== -->
   <table class="summary">
     <tr><td>SUB TOTAL</td><td class="tr"><?php echo rupiah($invoice['sub_total'] ?? 0); ?></td></tr>
     <tr><td>PPN</td><td class="tr"><?php echo rupiah($invoice['ppn_amount'] ?? 0); ?></td></tr>
@@ -118,7 +130,7 @@ $__logo = $LOGO_SRC ?: ($LOGO_FILE ?: $LOGO_URL);
     <tr><td>GRAND TOTAL</td><td class="tr"><?php echo rupiah($invoice['grand_total'] ?? 0); ?></td></tr>
   </table>
 
-  <!-- Transfer -->
+  <!-- ===== Transfer ===== -->
   <div class="transfer">
     <div class="tag">Please Transfer to Account:</div>
     <p><strong>Bank :</strong> <?php echo e($invoice['transfer_bank'] ?? ''); ?></p>
@@ -126,7 +138,7 @@ $__logo = $LOGO_SRC ?: ($LOGO_FILE ?: $LOGO_URL);
     <p><strong>A/C :</strong> <?php echo e($invoice['transfer_account_name'] ?? ''); ?></p>
   </div>
 
-  <!-- Signature -->
+  <!-- ===== Signature ===== -->
   <div class="sign">
     <p class="date">Jakarta, <?php echo e(date('d F Y', strtotime($invoice['footer_date'] ?? 'now'))); ?></p>
     <br><br><br>
