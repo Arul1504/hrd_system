@@ -1,13 +1,15 @@
 <?php
 // ============================
-// process_add_employee.php
+// process_add_employee.php — FINAL VERSION DENGAN CNAF SUB-FIELDS
 // ============================
 
 session_start();
+// Menonaktifkan laporan error MySQLi agar kita bisa menangani error secara manual
 mysqli_report(MYSQLI_REPORT_OFF);
 
 // Koneksi
 require_once __DIR__ . '/../config.php';
+// Fallback koneksi jika require gagal (pastikan file config.php ada)
 if (!isset($conn) || !($conn instanceof mysqli)) {
     $conn = new mysqli("localhost", "root", "", "db_hrd2");
     if ($conn->connect_error) {
@@ -16,7 +18,6 @@ if (!isset($conn) || !($conn instanceof mysqli)) {
 }
 
 // --- PERIKSA HAK AKSES ---
-// Mengubah role dari HRD ke ADMIN
 if (!isset($_SESSION['id_karyawan']) || ($_SESSION['role'] ?? '') !== 'ADMIN') {
     header("Location: ../../index.php");
     exit();
@@ -31,7 +32,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $nik_ktp = trim($data_post['nik_ktp'] ?? '');
     $nik_karyawan = trim($data_post['nik_karyawan'] ?? '');
 
-    // === CEK DUPLIKAT ===
+    // === CEK DUPLIKAT NIK KTP ===
     if ($nik_ktp !== '') {
         $cek = $conn->prepare("SELECT 1 FROM karyawan WHERE nik_ktp = ?");
         $cek->bind_param("s", $nik_ktp);
@@ -45,6 +46,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $cek->close();
     }
 
+    // === CEK DUPLIKAT NIK KARYAWAN ===
     if ($nik_karyawan !== '') {
         $cek = $conn->prepare("SELECT 1 FROM karyawan WHERE nik_karyawan = ?");
         $cek->bind_param("s", $nik_karyawan);
@@ -58,7 +60,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $cek->close();
     }
 
-    // === MAPPING INPUT KE KOLOM DATABASE ===
+    // --- MAPPING INPUT KE KOLOM DATABASE (TERMASUK FIELD CNAF BARU) ---
+    // Atribut array ini penting agar PHP mengetahui nama kolom di DB.
     $input_to_db_map = [
         'nama_karyawan' => 'nama_karyawan',
         'jabatan' => 'jabatan',
@@ -120,6 +123,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         'no_bpjs_kes' => 'no_bpjs_kes',
         'role' => 'role',
         'proyek' => 'proyek',
+
+        /* === FIELD KHUSUS CNAF SUB-PROJECTS === */
+        'sub_project_cnaf' => 'sub_project_cnaf',
+        'no' => 'no', // Field urutan (mungkin duplikat ID, hati-hati)
+        'tanggal_pembuatan' => 'tanggal_pembuatan',
+        'spr_bro' => 'spr_bro',
+        'nama_bm_sm' => 'nama_bm_sm',
+        'nama_tl' => 'nama_tl',
+        'level' => 'level',
+        'tanggal_pkm' => 'tanggal_pkm',
+        'nama_sm_cm' => 'nama_sm_cm',
+        'sbi' => 'sbi',
+        'tanggal_sign_kontrak' => 'tanggal_sign_kontrak',
+        'nama_oh' => 'nama_oh',
+        'jabatan_sebelumnya' => 'jabatan_sebelumnya',
+        'nama_bm' => 'nama_bm',
+        'allowance' => 'allowance',
+        'tunjangan_kesehatan' => 'tunjangan_kesehatan',
+        'om' => 'om',
+        'nama_cm' => 'nama_cm',
+        /* ======================================= */
     ];
 
     $columns = [];
@@ -127,18 +151,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $types = '';
 
     foreach ($data_post as $input_name => $input_value) {
-        if (in_array($input_name, ['proyek','__labels','proyek_otomatis'])) continue;
+        // Abaikan field yang tidak perlu disimpan ke DB
+        if (in_array($input_name, ['__labels', 'proyek_otomatis'])) continue;
+
+        // Tentukan nama kolom DB. Jika ada di map, gunakan, jika tidak ada, gunakan input_name.
         $db_col = $input_to_db_map[$input_name] ?? $input_name;
+
+        // Normalisasi nilai kosong ke NULL untuk DB
         $columns[] = $db_col;
         $values[] = ($input_value === '') ? null : $input_value;
-        $types .= 's';
+        $types .= 's'; // Asumsikan semua data bertipe string/text
     }
 
-    // Proyek selalu ikut
-    $columns[] = 'proyek';
-    $values[] = $proyek;
-    $types .= 's';
-
+    // Jika kolom array kosong (semua input dibatasi), kirim error
     if (empty($columns)) {
         $_SESSION['add_error'] = "Form kosong, tidak ada data yang disimpan.";
         header("Location: ./all_employees.php?open_add=1");
@@ -147,33 +172,46 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     // Query insert
     $placeholders = implode(',', array_fill(0, count($columns), '?'));
-    $sql = "INSERT INTO karyawan (".implode(',', $columns).") VALUES ($placeholders)";
+    $sql = "INSERT INTO karyawan (" . implode(',', $columns) . ") VALUES ($placeholders)";
+    
+    // Debugging (Opsional: Uncomment untuk melihat query di log error)
+    // error_log("SQL: " . $sql);
+    // error_log("Values: " . print_r($values, true));
+    
     $stmt = $conn->prepare($sql);
     if (!$stmt) {
-        $_SESSION['add_error'] = "Error SQL: " . $conn->error;
+        // Log error SQL lebih detail
+        error_log("SQL PREPARE ERROR: " . $conn->error);
+        $_SESSION['add_error'] = "Error SQL saat persiapan: " . $conn->error;
         header("Location: ./all_employees.php?open_add=1");
         exit();
     }
 
+    // Binding parameters
     $bind_params = [];
     $bind_params[] = $types;
     foreach ($values as $key => $val) {
         $bind_params[] = &$values[$key];
     }
-    call_user_func_array([$stmt,'bind_param'], $bind_params);
+    // Menggunakan call_user_func_array untuk bind_param
+    call_user_func_array([$stmt, 'bind_param'], $bind_params);
 
     if ($stmt->execute()) {
         unset($_SESSION['add_old'], $_SESSION['add_error']);
         header("Location: ./all_employees.php?status=success");
         exit();
     } else {
+        // Log error SQL saat eksekusi
+        error_log("SQL EXECUTE ERROR (" . $stmt->errno . "): " . $stmt->error);
+        
         if ($stmt->errno == 1062) {
+            // Error 1062 = Duplicate entry (biasanya NIK)
             $_SESSION['add_error'] = "NIK sudah digunakan. Tidak bisa ditambahkan lagi.";
-            header("Location: ./all_employees.php?open_add=1");
-            exit();
+        } else {
+            $_SESSION['add_error'] = "Terjadi kesalahan saat menyimpan data (DB Error: " . $stmt->error . ").";
         }
-        $_SESSION['add_error'] = "Terjadi kesalahan saat menyimpan data.";
         header("Location: ./all_employees.php?open_add=1");
         exit();
     }
 }
+?>

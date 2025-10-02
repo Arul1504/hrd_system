@@ -1,0 +1,367 @@
+<?php
+// ===========================
+// surat_tugas_view.php (MATCH DESAIN CONTOH)
+// ===========================
+require '../config.php';
+if (session_status() === PHP_SESSION_NONE) session_start();
+
+// Helper aman HTML
+if (!function_exists('e')) {
+  function e($s){ return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); }
+}
+
+// Hanya HRD / ADMIN
+if (!isset($_SESSION['id_karyawan']) || !in_array($_SESSION['role'] ?? '', ['HRD','ADMIN'])) {
+  exit('Unauthorized');
+}
+
+$id = (int)($_GET['id'] ?? 0);
+
+// Ambil data surat + karyawan
+$q = $conn->prepare("SELECT st.*, k.nama_karyawan, k.nik_ktp, k.jabatan, k.proyek, k.join_date,
+                            k.alamat AS alamat_karyawan
+                     FROM surat_tugas st
+                     JOIN karyawan k ON k.id_karyawan = st.id_karyawan
+                     WHERE st.id=? LIMIT 1");
+$q->bind_param("i",$id);
+$q->execute();
+$r = $q->get_result()->fetch_assoc();
+$q->close();
+if (!$r) exit('Surat tugas tidak ditemukan');
+
+// Data sidebar
+$id_karyawan_admin = $_SESSION['id_karyawan'];
+$nama_user_admin   = $_SESSION['nama'] ?? 'User';
+$role_user_admin   = $_SESSION['role'] ?? 'KARYAWAN';
+$sql_pending_requests = "SELECT COUNT(*) AS total_pending FROM pengajuan WHERE status_pengajuan='Menunggu'";
+$total_pending = ($conn->query($sql_pending_requests)->fetch_assoc()['total_pending'] ?? 0);
+
+$stmt_admin_info = $conn->prepare("SELECT nik_ktp, no_hp, jabatan FROM karyawan WHERE id_karyawan=?");
+$nik_user_admin='Tidak Ditemukan'; $jabatan_user_admin='Tidak Ditemukan';
+if ($stmt_admin_info){
+  $stmt_admin_info->bind_param("i",$id_karyawan_admin);
+  $stmt_admin_info->execute();
+  if ($info = $stmt_admin_info->get_result()->fetch_assoc()){
+    $nik_user_admin = $info['nik_ktp'] ?? $nik_user_admin;
+    $noTelp  = $info['no_hp'] ?? $noTelp;
+    $jabatan_user_admin = $info['jabatan'] ?? $jabatan_user_admin;
+  }
+  $stmt_admin_info->close();
+}
+$conn->close();
+
+// Helper tanggal
+function idDate($date){
+  if(!$date) return '-';
+  $bulan = ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des'];
+  $ts = strtotime($date);
+  return date('d ', $ts).$bulan[(int)date('n',$ts)-1].' '.date('Y',$ts);
+}
+
+// Mapping default (sesuai instruksi "pakai default")
+$noSurat      = $r['no_surat'] ?? '-';
+$nama         = $r['nama_karyawan'] ?? '-';
+$nik          = $r['nik_ktp'] ?? '-';
+$jabatan      = ($r['posisi'] ?? '') ?: ($r['jabatan'] ?? '-');
+$salesCode    = $r['sales_code'] ?? '-';
+$penempatan   = $r['penempatan'] ?? '-';                 // Cabang
+$alamatKantor = $r['alamat_penempatan'] ?? '-';
+$alamatTeks   = $r['alamat_penempatan'] ?? '-';
+
+$efektif      = $r['join_date'] ?? null;                 // Efektif Penempatan
+$tglSurat     = $r['tgl_pembuatan'] ?? date('Y-m-d');
+
+// Nama file unduh
+$file_no_surat = preg_replace('/[^A-Za-z0-9-]+/','-', $noSurat ?: 'tanpa-nomor');
+?>
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <title>Surat Penugasan - <?= e($noSurat) ?></title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+  <link rel="stylesheet" href="../style.css">
+  <style>
+    :root { --hitam:#111; --abu:#666; --merah:#e53935;  }
+    *{box-sizing:border-box}
+    body{margin:0;background:#f5f6fa;font-family:'Poppins',system-ui,-apple-system,Segoe UI,Roboto,Arial}
+    .container{display:flex;min-height:100vh}
+    .main{flex:1;padding:28px}
+
+    /* Kartu Surat (proporsi A4) */
+    .surat{
+      width: 794px;               /* ~ A4 width px @96dpi */
+      min-height: 800px;         /* ~ A4 height px @96dpi */
+      margin:0 auto;
+      background:#fff;border-radius:10px;padding:36px 40px 28px;
+      box-shadow:0 2px 6px rgba(0,0,0,.08);
+      color:#111;
+    }
+
+    /* Header sesuai gambar */
+    .kop{
+      display:grid; grid-template-columns:84px 1fr; gap:14px; align-items:center;
+      border-bottom:2px solid #2c3e50; padding-bottom:10px; margin-bottom:14px;
+    }
+    .kop img{width:72px;height:auto}
+    .kop .title{
+      line-height:1.05; font-weight:700; letter-spacing:.2px;
+    }
+    .kop .title .pt{font-size:26px; color:#111}
+    .kop .title .brand{font-size:26px; font-weight:800}
+    .kop .title .brand .m{color:var(--merah)}
+    .kop .title .brand .a{color:var(--hijau)}
+    .kop .title .brand .u{color:var(--merah)}
+    .kop .addr{
+      grid-column:1 / -1; text-align:center; margin-top:6px; font-size:12.5px; color:#444;
+      line-height:1.45;
+    }
+    .kop .addr a{color:#111;text-decoration:underline}
+
+    /* Judul & nomor */
+    .judul{
+      text-align:center; margin:14px 0 4px; font-weight:700; font-size:16.5px; text-decoration:underline;
+    }
+    .nomor{
+      text-align:center; font-size:13.5px; margin-bottom:14px;
+    }
+
+    /* Isi surat */
+    .p{font-size:13.5px; margin:10px 0 14px; text-align:left}
+    .tbl{
+      width:100%; border-collapse:collapse; font-size:13.5px; margin:4px 0 10px;
+    }
+    .tbl td{vertical-align:top; padding:2px 0}
+    .tbl .lbl{width:140px}
+    .tbl .colon{width:14px; text-align:center}
+    .blok-penempatan{font-size:13.5px; margin:12px 0 10px}
+    .mt-6{margin-top:6px}
+
+    /* TTD blok (align kiri seperti contoh) */
+    .ttd{margin-top:26px; font-size:13.5px}
+    .ttd .tgl{margin-bottom:14px}
+    .ttd .nama{font-weight:700; margin-top:0px}
+    .ttd .jab{color:#555; margin-top:2px}
+    .tanda-tangan{width:155px; height:auto; margin-top:4px}
+    .stempel{width:120px; opacity:.95; margin-top:8px}
+
+    /* Tombol atas */
+    .download-controls button{
+      padding:8px 14px; background:#3498db; color:#fff; border:none; border-radius:6px; cursor:pointer; margin-left:6px
+    }
+
+    /* Sembunyikan dekor saat cetak */
+    @media print{
+      body{background:#fff}
+      .sidebar, .download-controls{display:none !important}
+      .surat{box-shadow:none; border:0; margin:0; width:auto; min-height:auto; padding:0}
+    }
+    /* Sidebar dropdown */
+        .sidebar-nav .dropdown-trigger {
+            position: relative;
+        }
+
+        .sidebar-nav .dropdown-link {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .sidebar-nav .dropdown-menu {
+            display: none;
+            position: absolute;
+            top: 100%;
+            left: 0;
+            min-width: 200px;
+            background: #2c3e50;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, .2);
+            padding: 0;
+            margin: 0;
+            list-style: none;
+            z-index: 11;
+            border-radius: 0 0 8px 8px;
+            overflow: hidden;
+        }
+
+        .sidebar-nav .dropdown-menu li a {
+            padding: 12px 20px;
+            display: block;
+            color: #ecf0f1;
+            text-decoration: none;
+            transition: background-color .3s;
+        }
+
+        .sidebar-nav .dropdown-menu li a:hover {
+            background: #34495e;
+        }
+
+        .sidebar-nav .dropdown-trigger:hover .dropdown-menu {
+            display: block;
+        }
+
+        .badge {
+            background: #ef4444;
+            color: #fff;
+            padding: 2px 8px;
+            border-radius: 999px;
+            font-size: 12px;
+        }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <!-- Sidebar -->
+    <aside class="sidebar">
+      <div class="company-brand">
+        <img src="../image/manu.png" class="company-logo">
+        <p class="company-name">PT Mandiri Andalan Utama</p>
+      </div>
+      <div class="user-info">
+        <div class="user-avatar"><?= e(strtoupper(substr($nama_user_admin,0,2))) ?></div>
+        <div class="user-details">
+          <p class="user-name"><?= e($nama_user_admin) ?></p>
+          <p class="user-id"><?= e($nik_user_admin) ?></p>
+          <p class="user-role"><?= e($role_user_admin) ?></p>
+        </div>
+      </div>
+      <nav class="sidebar-nav">
+        <ul>
+          <li><a href="../dashboard_admin.php"><i class="fas fa-home"></i> Dashboard</a></li>
+          <li><a href="../absensi/absensi.php"><i class="fas fa-edit"></i> Absensi</a></li>
+          <li class="dropdown-trigger">
+            <a href="#" class="dropdown-link"><i class="fas fa-users"></i> Data Karyawan <i class="fas fa-caret-down"></i></a>
+            <ul class="dropdown-menu">
+              <li><a href="../data_karyawan/all_employees.php">Semua Karyawan</a></li>
+              <li><a href="../data_karyawan/karyawan_nonaktif.php">Non-Aktif</a></li>
+            </ul>
+          </li>
+          <li class="dropdown-trigger">
+            <a href="#" class="dropdown-link"><i class="fas fa-envelope-open-text"></i> Data Pengajuan
+              <span class="badge"><?= $total_pending ?></span> <i class="fas fa-caret-down"></i></a>
+            <ul class="dropdown-menu">
+              <li><a href="../pengajuan/pengajuan.php">Pengajuan</a></li>
+              <li><a href="../pengajuan/kelola_pengajuan.php">Kelola Pengajuan
+                <span class="badge"><?= $total_pending ?></span></a></li>
+            </ul>
+          </li>
+          <li><a href="../monitoring_kontrak/monitoring_kontrak.php"><i class="fas fa-calendar-alt"></i> Monitoring Kontrak</a></li>
+          <li class="active"><a href="surat_tugas_history.php"><i class="fas fa-file-alt"></i> Riwayat Surat Tugas</a></li>
+          <li><a href="../payslip/e_payslip_admin.php"><i class="fas fa-money-check-alt"></i> E-Pay Slip</a></li>
+          <li><a href="../invoice/invoice.php"><i class="fas fa-money-check-dollar"></i> Invoice</a></li>
+        </ul>
+      </nav>
+      <div class="logout-link"><a href="../../logout.php"><i class="fas fa-sign-out-alt"></i> Keluar</a></div>
+    </aside>
+
+    <!-- Main -->
+    <main class="main">
+      <div class="download-controls" style="text-align:right; margin-bottom:16px;">
+        <button onclick="downloadSuratAsPDF('<?= e($file_no_surat) ?>')"><i class="fas fa-download"></i> Unduh PDF</button>
+        <button onclick="sendSuratAsEmail()" id="btnSendEmail"><i class="fas fa-envelope"></i> Kirim Surat ke Email</button>
+      </div>
+      <div id="emailStatus" style="margin:6px 0 12px; text-align:right; font-weight:600;"></div>
+
+      <!-- KONTEN SURAT -->
+      <section class="surat" id="surat-tugas-dokumen">
+        <!-- Kop -->
+        <div class="kop">
+          <img src="../image/manu.png" alt="Logo">
+          <div class="title">
+            <div class="pt">PT. <span class="brand"><span class="m">MANDIRI</span> <span class="a">ANDALAN</span> <span class="u">UTAMA</span></span></div>
+            <div class="addr">
+              Jl. Sultan Iskandar Muda No. 30 A – B Lt. 3, Arteri Pondok Indah<br>
+              Kebayoran Lama Selatan – Kebayoran Lama – Jakarta Selatan 12240<br>
+              Telp: (021) 27518306&nbsp;&nbsp; Web: <a href="http://www.manu.co.id/">http://www.manu.co.id/</a>
+            </div>
+          </div>
+        </div>
+
+        <!-- Judul & Nomor -->
+        <div class="judul">SURAT PENUGASAN</div>
+        <div class="nomor">NO : <?= e($noSurat) ?></div>
+
+        <!-- Pembuka -->
+        <p class="p">Bersama ini kami menginformasikan bahwa :</p>
+
+        <!-- Biodata rata-kolom seperti contoh -->
+        <table class="tbl">
+          <tr><td class="lbl">Nama</td><td class="colon">:</td><td><?= e($nama) ?></td></tr>
+          <tr><td class="lbl">No. KTP</td><td class="colon">:</td><td><?= e($nik) ?></td></tr>
+          <tr><td class="lbl">Jabatan</td><td class="colon">:</td><td><?= e($jabatan) ?></td></tr>
+          <tr><td class="lbl">Sales Code</td><td class="colon">:</td><td><?= e($salesCode) ?></td></tr>
+          <tr><td class="lbl">Alamat</td><td class="colon">:</td><td><?= nl2br(e($alamatTeks)) ?></td></tr>
+          <tr><td class="lbl">No. Telp</td><td class="colon">:</td><td><?= e($noTelp) ?></td></tr>
+        </table>
+
+        <!-- Paragraf penempatan -->
+        <p class="p">
+          Adalah karyawan PT. Mandiri Andalan Utama yang ditempatkan di
+          <strong><?= e($r['klien'] ?? 'Bank Cimbniaga') ?></strong> Cabang sebagai berikut :
+        </p>
+
+        <table class="tbl">
+          <tr><td class="lbl">Cabang</td><td class="colon">:</td><td><?= e($penempatan) ?></td></tr>
+          <tr><td class="lbl">Alamat Kantor</td><td class="colon">:</td><td><?= nl2br(e($alamatKantor)) ?></td></tr>
+          <tr><td class="lbl">Efektif Penempatan di Cabang</td><td class="colon">:</td><td><?= e(idDate($efektif)) ?></td></tr>
+        </table>
+
+        <p class="p mt-6">Demikian surat tugas ini dibuat untuk digunakan sebagaimana mestinya.</p>
+
+        <!-- TTD kiri -->
+        <div class="ttd">
+          <div class="tgl">Jakarta, <?= e(idDate($tglSurat)) ?></div>
+          <div>Hormat Kami,</div>
+          <div><strong>PT. Mandiri Andalan Utama</strong></div>
+          <img src="../image/ttd.png" alt="Tanda Tangan" class="tanda-tangan">
+          <!-- Stempel opsional, bila punya file: ../image/stempel.png -->
+          <!-- <img src="../image/stempel.png" alt="Stempel" class="stempel"> -->
+          <div class="nama">Kutobburizal</div>
+          <div class="jab">HR &amp; Support Manager</div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- Libs -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.9.3/html2pdf.bundle.min.js"></script>
+  <script>
+    function sendSuratAsEmail(){
+      const element = document.getElementById('surat-tugas-dokumen');
+      const emailStatus = document.getElementById('emailStatus');
+      const btn = document.getElementById('btnSendEmail');
+      const original = btn.innerHTML;
+      if(!confirm("Kirim surat tugas ini ke email karyawan?")) return;
+
+      btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Mengirim...'; emailStatus.innerHTML='';
+      const opt = { margin:[5,5,5,5], filename:'Surat-Tugas.pdf', image:{type:'jpeg',quality:0.9}, html2canvas:{scale:2,useCORS:true}, jsPDF:{unit:'mm',format:'a4',orientation:'portrait'} };
+      const worker = html2pdf().from(element).set(opt);
+      worker.output('blob').then(function(pdfBlob){
+        const formData = new FormData();
+        formData.append('surat_pdf', pdfBlob, 'surat_tugas.pdf');
+        formData.append('id_surat', "<?= e($r['id']) ?>");
+        return fetch('send_surat_email.php', { method:'POST', body: formData });
+      }).then(res=>res.text()).then(result=>{
+        if(result && result.toLowerCase().includes('berhasil')){
+          emailStatus.innerHTML = '<span style="color:#27ae60"><i class="fas fa-check-circle"></i> '+result+'</span>';
+          btn.style.backgroundColor='#95a5a6';
+        }else{
+          emailStatus.innerHTML = '<span style="color:#c0392b"><i class="fas fa-exclamation-triangle"></i> '+(result||'Gagal mengirim')+'</span>';
+          btn.disabled=false; btn.innerHTML=original;
+        }
+      }).catch(err=>{
+        console.error(err);
+        emailStatus.innerHTML = '<span style="color:#c0392b"><i class="fas fa-times-circle"></i> Terjadi kesalahan.</span>';
+        btn.disabled=false; btn.innerHTML=original;
+      });
+    }
+
+    function downloadSuratAsPDF(fileNamePrefix){
+      const element = document.getElementById('surat-tugas-dokumen');
+      const opt = { margin: [6,6,6,6], filename:`Surat-Tugas-${fileNamePrefix}.pdf`, image:{type:'jpeg',quality:0.98}, html2canvas:{scale:2,useCORS:true}, jsPDF:{unit:'mm',format:'a4',orientation:'portrait'} };
+      html2pdf().from(element).set(opt).save();
+    }
+  </script>
+</body>
+</html>

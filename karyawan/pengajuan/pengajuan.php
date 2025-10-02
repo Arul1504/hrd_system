@@ -16,7 +16,7 @@ $id_karyawan = $_SESSION['id_karyawan'];
 $nama_user = $_SESSION['nama'];
 
 // Ambil NIK dan Jabatan dari database berdasarkan ID karyawan
-$stmt_user_info = $conn->prepare("SELECT nik_ktp, jabatan FROM karyawan WHERE id_karyawan = ?");
+$stmt_user_info = $conn->prepare("SELECT nik_ktp, jabatan, proyek, alamat_email FROM karyawan WHERE id_karyawan = ?");
 $stmt_user_info->bind_param("i", $id_karyawan);
 $stmt_user_info->execute();
 $result_user_info = $stmt_user_info->get_result();
@@ -29,59 +29,179 @@ if (!$user_info) {
 }
 
 $nik_user = $user_info['nik_ktp'];
+$project = $user_info['proyek'];
+$email = $user_info['alamat_email'];
 $jabatan_user = $user_info['jabatan'];
 
 // --- HANDLE FORM SUBMISSION ---
 if ($_SERVER["REQUEST_METHOD"] == "POST") {
     $jenis_pengajuan = $_POST['submission-type'];
-    $tanggal_mulai = $_POST['start-date'];
-    $tanggal_berakhir = $_POST['end-date'];
-    $keterangan = $_POST['reason'];
-
-    $nama_pengganti = !empty($_POST['replacement-name']) ? $_POST['replacement-name'] : NULL;
-    $nik_pengganti = !empty($_POST['replacement-nik']) ? $_POST['replacement-nik'] : NULL;
-    $wa_pengganti = !empty($_POST['replacement-wa']) ? $_POST['replacement-wa'] : NULL;
-
-    // Proses unggah file PDF
-    $dokumen_pendukung = NULL;
-    if (isset($_FILES['surat-file']) && $_FILES['surat-file']['error'] == 0) {
-        $upload_dir = '../../uploads/';
-        
-        if (!is_dir($upload_dir)) {
-            mkdir($upload_dir, 0755, true);
-        }
-
-        $file_name = uniqid() . '-' . basename($_FILES['surat-file']['name']);
-        $file_path = $upload_dir . $file_name;
-        $file_type = pathinfo($file_path, PATHINFO_EXTENSION);
-        $allowed_types = ['pdf'];
-
-        if (in_array(strtolower($file_type), $allowed_types)) {
-            if (move_uploaded_file($_FILES['surat-file']['tmp_name'], $file_path)) {
-                $dokumen_pendukung = $file_name;
-            } else {
-                echo "<script>alert('Gagal mengunggah file.');</script>";
-            }
-        } else {
-            echo "<script>alert('Hanya file PDF yang diizinkan.');</script>";
-        }
-    }
-
-    // Insert data ke database
     $status_pengajuan = 'Menunggu';
-    $sql = "INSERT INTO pengajuan (id_karyawan, nik_karyawan, jenis_pengajuan, tanggal_mulai, tanggal_berakhir, keterangan, dokumen_pendukung, nama_pengganti, nik_pengganti, wa_pengganti, status_pengajuan, tanggal_diajukan) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())";
-    
-    $stmt = $conn->prepare($sql);
-    
-    $stmt->bind_param("issssssssss", $id_karyawan, $nik_user, $jenis_pengajuan, $tanggal_mulai, $tanggal_berakhir, $keterangan, $dokumen_pendukung, $nama_pengganti, $nik_pengganti, $wa_pengganti, $status_pengajuan);
-    
-    if ($stmt->execute()) {
-        echo "<script>alert('Pengajuan berhasil dikirim!'); window.location.href='pengajuan.php';</script>";
+    $dokumen_pendukung_final = NULL;
+
+    if ($jenis_pengajuan === 'Reimburse') {
+        // =========================================================
+        // --- LOGIKA UNTUK REIMBURSE MULTIPLE ITEMS ---
+        // =========================================================
+
+        // 1. Ambil data dasar Reimburse (non-berulang)
+        $lokasi = $_POST['lokasi'];
+        $kategori_utama = $_POST['kategori-utama'];
+        $tanggal_utama = $_POST['tanggal-transaksi-utama'];
+        
+        // Data diambil dari sesi user
+        $project_karyawan = $user_info['proyek']; 
+        
+        // 2. Ambil data item (array input)
+        $deskripsi_arr = isset($_POST['deskripsi']) ? $_POST['deskripsi'] : [];
+        $nominal_arr = isset($_POST['nominal']) ? $_POST['nominal'] : [];
+        $kwitansi_arr = isset($_FILES['kwitansi_file']) ? $_FILES['kwitansi_file'] : [];
+        
+        $jumlah_item = count($deskripsi_arr);
+        $total_item_sukses = 0;
+        $error_messages = [];
+
+        // Validasi Awal Reimburse
+        if ($jumlah_item == 0) {
+            echo "<script>alert('Minimal harus ada satu item reimbursement yang diisi.');</script>";
+            exit();
+        }
+
+        // 3. Loop dan Insert SETIAP ITEM sebagai entri terpisah di tabel pengajuan
+        for ($i = 0; $i < $jumlah_item; $i++) {
+            
+            // Periksa apakah item ini terkirim (untuk menghindari error jika array tidak sinkron)
+            if (!isset($deskripsi_arr[$i]) || !isset($nominal_arr[$i])) continue;
+            
+            $current_deskripsi = $deskripsi_arr[$i];
+            $current_nominal = floatval($nominal_arr[$i]); // Pastikan ini float
+
+            // Periksa apakah item ini kosong/tidak valid
+            if (empty(trim($current_deskripsi)) || $current_nominal <= 0) {
+                // Lewati item yang kosong/tidak valid
+                continue;
+            }
+
+            // A. Siapkan data pengajuan untuk item saat ini
+            $keterangan_final = "REIMBURSE (" . $kategori_utama . "): Nominal Rp. " . number_format($current_nominal, 0, ',', '.') . " | Lokasi: " . $lokasi . " | Project: " . $project_karyawan . " | Deskripsi: " . $current_deskripsi;
+            $tanggal_mulai_final = $tanggal_utama;
+            $tanggal_berakhir_final = $tanggal_utama;
+            
+            $nama_pengganti = NULL;
+            $nik_pengganti = NULL;
+            $wa_pengganti = NULL;
+            $dokumen_pendukung_final = NULL;
+
+            // B. Proses unggah file Kwitansi untuk item saat ini
+            if ($kwitansi_arr['error'][$i] == 0) {
+                $upload_dir = '../../uploads/';
+                
+                if (!is_dir($upload_dir)) {
+                    mkdir($upload_dir, 0755, true);
+                }
+
+                $file_name = uniqid() . '-' . basename($kwitansi_arr['name'][$i]);
+                $file_path = $upload_dir . $file_name;
+                $allowed_types = ['pdf', 'jpg', 'jpeg', 'png']; 
+                $file_type = pathinfo($file_path, PATHINFO_EXTENSION);
+
+
+                if (in_array(strtolower($file_type), $allowed_types)) {
+                    if (move_uploaded_file($kwitansi_arr['tmp_name'][$i], $file_path)) {
+                        $dokumen_pendukung_final = $file_name;
+                    } else {
+                        $error_messages[] = "Gagal mengunggah kwitansi item ke-" . ($i+1) . ".";
+                        continue; 
+                    }
+                } else {
+                    $error_messages[] = "Tipe file kwitansi item ke-" . ($i+1) . " tidak diizinkan.";
+                    continue; 
+                }
+            } else {
+                $error_messages[] = "Kwitansi wajib diunggah untuk item ke-" . ($i+1) . ".";
+                continue; 
+            }
+
+            // C. Insert item ke database
+            $sql = "INSERT INTO pengajuan (id_karyawan, nik_karyawan, jenis_pengajuan, tanggal_mulai, tanggal_berakhir, keterangan, dokumen_pendukung, nama_pengganti, nik_pengganti, wa_pengganti, status_pengajuan, tanggal_diajukan) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())";
+            
+            $stmt = $conn->prepare($sql);
+            
+            $stmt->bind_param("issssssssss", $id_karyawan, $nik_user, $jenis_pengajuan, $tanggal_mulai_final, $tanggal_berakhir_final, $keterangan_final, $dokumen_pendukung_final, $nama_pengganti, $nik_pengganti, $wa_pengganti, $status_pengajuan);
+            
+            if ($stmt->execute()) {
+                $total_item_sukses++;
+            } else {
+                $error_messages[] = "Error DB saat insert item ke-" . ($i+1) . ": " . $stmt->error;
+            }
+            if(isset($stmt)) $stmt->close(); // Tutup statement setelah insert
+        } 
+        
+        // 4. Beri feedback ke user
+        if ($total_item_sukses > 0) {
+            $alert_message = $total_item_sukses . " item Reimbursement berhasil dikirim!";
+            if (!empty($error_messages)) {
+                 $alert_message .= " Namun, ada masalah dengan beberapa item lainnya.";
+            }
+            echo "<script>alert('" . $alert_message . "'); window.location.href='pengajuan.php';</script>";
+        } else {
+            $alert_message = "Gagal mengirim pengajuan reimburse. Semua item tidak valid atau ada error: " . implode(', ', $error_messages);
+            echo "<script>alert('" . $alert_message . "');</script>";
+        }
+
     } else {
-        echo "<script>alert('Error: " . $stmt->error . "');</script>";
+        // =========================================================
+        // --- LOGIKA UNTUK CUTI, IZIN, SAKIT (SKEMA LAMA) ---
+        // =========================================================
+        $tanggal_mulai_final = $_POST['start-date'];
+        $tanggal_berakhir_final = $_POST['end-date'];
+        $keterangan_final = $_POST['reason'];
+
+        $nama_pengganti = !empty($_POST['replacement-name']) ? $_POST['replacement-name'] : NULL;
+        $nik_pengganti = !empty($_POST['replacement-nik']) ? $_POST['replacement-nik'] : NULL;
+        $wa_pengganti = !empty($_POST['replacement-wa']) ? $_POST['replacement-wa'] : NULL;
+
+        // Proses unggah file PDF untuk Cuti/Izin/Sakit
+        $dokumen_pendukung_final = NULL;
+        if (isset($_FILES['surat-file']) && $_FILES['surat-file']['error'] == 0) {
+             $upload_dir = '../../uploads/';
+            
+            if (!is_dir($upload_dir)) {
+                mkdir($upload_dir, 0755, true);
+            }
+
+            $file_name = uniqid() . '-' . basename($_FILES['surat-file']['name']);
+            $file_path = $upload_dir . $file_name;
+            $file_type = pathinfo($file_path, PATHINFO_EXTENSION);
+            $allowed_types = ['pdf'];
+
+            if (in_array(strtolower($file_type), $allowed_types)) {
+                if (move_uploaded_file($_FILES['surat-file']['tmp_name'], $file_path)) {
+                    $dokumen_pendukung_final = $file_name;
+                } else {
+                    echo "<script>alert('Gagal mengunggah file surat.');</script>";
+                }
+            } else {
+                echo "<script>alert('Hanya file PDF yang diizinkan untuk surat.');</script>";
+            }
+        }
+        
+        // Insert Cuti/Izin/Sakit data ke database (hanya 1 baris)
+        $sql = "INSERT INTO pengajuan (id_karyawan, nik_karyawan, jenis_pengajuan, tanggal_mulai, tanggal_berakhir, keterangan, dokumen_pendukung, nama_pengganti, nik_pengganti, wa_pengganti, status_pengajuan, tanggal_diajukan) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())";
+    
+        $stmt = $conn->prepare($sql);
+        
+        $stmt->bind_param("issssssssss", $id_karyawan, $nik_user, $jenis_pengajuan, $tanggal_mulai_final, $tanggal_berakhir_final, $keterangan_final, $dokumen_pendukung_final, $nama_pengganti, $nik_pengganti, $wa_pengganti, $status_pengajuan);
+        
+        if ($stmt->execute()) {
+            echo "<script>alert('Pengajuan berhasil dikirim!'); window.location.href='pengajuan.php';</script>";
+        } else {
+            echo "<script>alert('Error: " . $stmt->error . "');</script>";
+        }
+        if(isset($stmt)) $stmt->close();
     }
-    $stmt->close();
 }
+
 
 // --- TAMPILKAN RIWAYAT PENGAJUAN ---
 // Mengambil semua pengajuan untuk karyawan yang login
@@ -91,9 +211,12 @@ $stmt_history->bind_param("i", $id_karyawan);
 $stmt_history->execute();
 $result_history = $stmt_history->get_result();
 
+// Fungsi untuk HTML escaping
+
 ?>
 <!DOCTYPE html>
 <html lang="id">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -102,6 +225,20 @@ $result_history = $stmt_history->get_result();
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
     <style>
+        /* Tambahkan di dalam tag <style> */
+        /* Style untuk layout form Reimburse (2 kolom) */
+        .reimburse-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+
+        @media (max-width: 500px) {
+            .reimburse-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
         /* General page layout (unchanged) */
         .content-wrapper {
             display: grid;
@@ -109,34 +246,39 @@ $result_history = $stmt_history->get_result();
             grid-template-columns: 1fr 2fr;
             gap: 30px;
         }
+
         @media (max-width: 768px) {
             .content-wrapper {
                 grid-template-areas: "form" "history";
                 grid-template-columns: 1fr;
             }
         }
+
         .section {
             background-color: #ffffff;
             border-radius: 12px;
             padding: 25px;
             box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
         }
+
         .section-header h2 {
             font-size: 1.5rem;
             font-weight: 600;
             margin-bottom: 20px;
             color: #333;
         }
-        
+
         /* Form Styling */
         .submission-form {
             grid-area: form;
             display: flex;
             flex-direction: column;
         }
+
         .form-group {
             margin-bottom: 20px;
         }
+
         .form-group label {
             display: block;
             font-weight: 600;
@@ -144,6 +286,7 @@ $result_history = $stmt_history->get_result();
             color: #555;
             font-size: 0.95rem;
         }
+
         .form-group select,
         .form-group input[type="text"],
         .form-group input[type="date"],
@@ -158,6 +301,7 @@ $result_history = $stmt_history->get_result();
             background-color: #f9f9f9;
             transition: border-color 0.3s, box-shadow 0.3s;
         }
+
         .form-group select:focus,
         .form-group input[type="text"]:focus,
         .form-group input[type="date"]:focus,
@@ -166,10 +310,12 @@ $result_history = $stmt_history->get_result();
             border-color: #4285f4;
             box-shadow: 0 0 0 3px rgba(66, 133, 244, 0.2);
         }
+
         .form-group textarea {
             resize: vertical;
             min-height: 100px;
         }
+
         .btn-submit {
             background-color: #28a745;
             color: #fff;
@@ -187,15 +333,17 @@ $result_history = $stmt_history->get_result();
             justify-content: center;
             gap: 8px;
         }
+
         .btn-submit:hover {
             background-color: #218838;
             box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
         }
-        
+
         /* History Styling */
         .submission-history {
             grid-area: history;
         }
+
         .history-list {
             list-style: none;
             padding: 0;
@@ -204,6 +352,7 @@ $result_history = $stmt_history->get_result();
             flex-direction: column;
             gap: 10px;
         }
+
         .history-item {
             display: flex;
             justify-content: space-between;
@@ -213,25 +362,30 @@ $result_history = $stmt_history->get_result();
             border-radius: 8px;
             transition: box-shadow 0.3s, transform 0.3s;
         }
+
         .history-item:hover {
             box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
             transform: translateY(-2px);
         }
+
         .history-details {
             flex-grow: 1;
             display: flex;
             flex-direction: column;
             gap: 5px;
         }
+
         .submission-type {
             font-size: 1.1rem;
             font-weight: 600;
             color: #333;
         }
+
         .submission-date {
             font-size: 0.9rem;
             color: #666;
         }
+
         .submission-note {
             font-size: 0.85rem;
             color: #888;
@@ -240,6 +394,7 @@ $result_history = $stmt_history->get_result();
             text-overflow: ellipsis;
             max-width: 100%;
         }
+
         .history-status {
             padding: 6px 15px;
             border-radius: 20px;
@@ -250,9 +405,19 @@ $result_history = $stmt_history->get_result();
             min-width: 90px;
             text-transform: capitalize;
         }
-        .status-menunggu { background-color: #fbbc05; }
-        .status-disetujui { background-color: #34a853; }
-        .status-ditolak { background-color: #e74c3c; }
+
+        .status-menunggu {
+            background-color: #fbbc05;
+        }
+
+        .status-disetujui {
+            background-color: #34a853;
+        }
+
+        .status-ditolak {
+            background-color: #e74c3c;
+        }
+
         .history-empty {
             text-align: center;
             color: #888;
@@ -261,9 +426,13 @@ $result_history = $stmt_history->get_result();
             border-radius: 8px;
             border: 1px dashed #ddd;
         }
-        .history-empty p { margin: 0; }
+
+        .history-empty p {
+            margin: 0;
+        }
     </style>
 </head>
+
 <body>
     <div class="container">
         <aside class="sidebar">
@@ -301,47 +470,117 @@ $result_history = $stmt_history->get_result();
             <div class="content-wrapper">
                 <div class="section submission-form">
                     <h2>Buat Pengajuan Baru</h2>
-                    <form action="<?php echo htmlspecialchars($_SERVER["PHP_SELF"]); ?>" method="POST" enctype="multipart/form-data">
+                    <form action="<?php echo htmlspecialchars($_SERVER["PHP_SELF"]); ?>" method="POST"
+                        enctype="multipart/form-data">
                         <div class="form-group">
                             <label for="submission-type">Jenis Pengajuan</label>
-                            <select id="submission-type" name="submission-type" required>
+                            <select id="submission-type" name="submission-type" onchange="toggleForm()" required>
                                 <option value="">Pilih jenis...</option>
                                 <option value="Cuti">Cuti</option>
                                 <option value="Izin">Izin</option>
                                 <option value="Sakit">Sakit</option>
+                                <option value="Reimburse">Reimburse</option>
                             </select>
                         </div>
-                        <div class="form-group">
-                            <label for="start-date">Tanggal Mulai</label>
-                            <input type="date" id="start-date" name="start-date" required>
+
+                        <div id="standard-fields">
+                            <div class="form-group">
+                                <label for="start-date">Tanggal Mulai</label>
+                                <input type="date" id="start-date" name="start-date" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="end-date">Tanggal Berakhir</label>
+                                <input type="date" id="end-date" name="end-date" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="reason">Keterangan</label>
+                                <textarea id="reason" name="reason"
+                                    placeholder="Contoh: Cuti tahunan, Izin keperluan keluarga, Sakit demam..."
+                                    required></textarea>
+                            </div>
+                            <div class="form-group">
+                                <label for="surat-file">Unggah Dokumen Pendukung (PDF)</label>
+                                <input type="file" id="surat-file" name="surat-file" accept=".pdf" required>
+                                <small style="color: #777; font-size: 0.8rem; margin-top: 5px;">*Pastikan dokumen
+                                    berformat PDF dan tidak lebih dari 2MB.</small>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="replacement-name">Nama Pengganti (Opsional)</label>
+                                <input type="text" id="replacement-name" name="replacement-name"
+                                    placeholder="Masukkan nama pengganti">
+                            </div>
+                            <div class="form-group">
+                                <label for="replacement-nik">NIK Pengganti (Opsional)</label>
+                                <input type="text" id="replacement-nik" name="replacement-nik"
+                                    placeholder="Masukkan NIK pengganti">
+                            </div>
+                            <div class="form-group">
+                                <label for="replacement-wa">No. WA Pengganti (Opsional)</label>
+                                <input type="text" id="replacement-wa" name="replacement-wa"
+                                    placeholder="Masukkan nomor WhatsApp pengganti">
+                            </div>
                         </div>
-                        <div class="form-group">
-                            <label for="end-date">Tanggal Berakhir</label>
-                            <input type="date" id="end-date" name="end-date" required>
+
+                        <div id="reimburse-fields" style="display: none;">
+
+                            <div class="reimburse-grid">
+                                <div class="form-group">
+                                    <label for="nama-lengkap-reimburse">Nama Lengkap</label>
+                                    <input type="text" id="nama-lengkap-reimburse" name="nama-lengkap-reimburse"
+                                        value="<?= e($nama_user) ?>" readonly required>
+                                </div>
+                                <div class="form-group">
+                                    <label for="project-reimburse">Project</label>
+                                    <input type="text" id="project-reimburse" name="project-reimburse"
+                                        value="<?= e($project) ?>"  readonly required>
+                                </div>
+                            </div>
+
+                            <div class="reimburse-grid">
+                                <div class="form-group">
+                                    <label for="lokasi">Lokasi</label>
+                                    <input type="text" id="lokasi" name="lokasi" placeholder="Masukkan lokasi transaksi"
+                                        required>
+                                </div>
+                                <div class="form-group">
+                                    <label for="kategori-utama">Kategori</label>
+                                    <select id="kategori-utama" name="kategori-utama" required>
+                                        <option value="">Pilih Kategori Utama...</option>
+                                        <option value="Perjalanan Dinas">Perjalanan Dinas</option>
+                                        <option value="Kantor">Kantor</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div class="reimburse-grid">
+                                <div class="form-group">
+                                    <label for="email-reimburse">Email</label>
+                                    <input type="text" id="email-reimburse" name="email-reimburse"
+                                        value="<?= e($email) ?>"  readonly required>
+                                </div>
+                                <div class="form-group">
+                                    <label for="tanggal-transaksi-utama">Tanggal Utama</label>
+                                    <input type="date" id="tanggal-transaksi-utama" name="tanggal-transaksi-utama"
+                                        required>
+                                </div>
+                            </div>
+
+                            <hr style="border: 0; border-top: 1px solid #eee; margin: 25px 0 10px;">
+
+                            <h3>Rincian Pengeluaran</h3>
+                            <div id="item-list">
+                            </div>
+
+                            <button type="button" onclick="addReimbursementRow(event)" class="btn-submit"
+                                style="background-color: #007bff; max-width: 150px; margin-left: 0;">
+                                <i class="fas fa-plus"></i> Tambah Item
+                            </button>
+                            <small style="color: #777; font-size: 0.8rem; margin-top: 5px;">*Semua rincian pengeluaran
+                                di atas akan dikirim.</small>
+
                         </div>
-                        <div class="form-group">
-                            <label for="reason">Keterangan</label>
-                            <textarea id="reason" name="reason" placeholder="Contoh: Cuti tahunan, Izin keperluan keluarga, Sakit demam..." required></textarea>
-                        </div>
-                        <div class="form-group">
-                            <label for="surat-file">Unggah Dokumen Pendukung (PDF)</label>
-                            <input type="file" id="surat-file" name="surat-file" accept=".pdf" required>
-                            <small style="color: #777; font-size: 0.8rem; margin-top: 5px;">*Pastikan dokumen berformat PDF dan tidak lebih dari 2MB.</small>
-                        </div>
-                        
-                        <div class="form-group">
-                            <label for="replacement-name">Nama Pengganti (Opsional)</label>
-                            <input type="text" id="replacement-name" name="replacement-name" placeholder="Masukkan nama pengganti">
-                        </div>
-                        <div class="form-group">
-                            <label for="replacement-nik">NIK Pengganti (Opsional)</label>
-                            <input type="text" id="replacement-nik" name="replacement-nik" placeholder="Masukkan NIK pengganti">
-                        </div>
-                        <div class="form-group">
-                            <label for="replacement-wa">No. WA Pengganti (Opsional)</label>
-                            <input type="text" id="replacement-wa" name="replacement-wa" placeholder="Masukkan nomor WhatsApp pengganti">
-                        </div>
-                        
+
                         <button type="submit" class="btn-submit">
                             <i class="fas fa-paper-plane"></i> Kirim Pengajuan
                         </button>
@@ -397,7 +636,114 @@ $result_history = $stmt_history->get_result();
             </div>
         </main>
     </div>
+   <script>
+    // Template HTML untuk baris item Reimburse yang akan diduplikasi
+    const ITEM_TEMPLATE = `
+        <div class="reimburse-item-row" style="border-top: 1px dashed #eee; padding-top: 15px; margin-top: 15px;">
+            <button type="button" onclick="removeReimbursementRow(event)" 
+                style="float: right; color: #e74c3c; background: none; border: none; cursor: pointer; font-size: 1.2rem;">
+                <i class="fas fa-times-circle"></i> Hapus
+            </button>
+            <div class="reimburse-grid" style="grid-template-columns: 2fr 1fr 1fr;">
+                <div class="form-group">
+                    <label>Description</label>
+                    <textarea name="deskripsi[]" placeholder="Jelaskan rincian pengeluaran..." required style="min-height: 45px;"></textarea>
+                </div>
+                <div class="form-group">
+                    <label>Nominal (Rp)</label>
+                    <input type="number" name="nominal[]" min="1" placeholder="Rp. 0" required>
+                </div>
+                <div class="form-group">
+                    <label>Kwitansi</label>
+                    <input type="file" name="kwitansi_file[]" accept=".pdf, .jpg, .jpeg, .png" required> 
+                    <small class="file-note" style="color: #777; font-size: 0.8rem; margin-top: 5px;">*Format PDF/JPG/PNG.</small>
+                </div>
+            </div>
+        </div>
+    `;
+
+    document.addEventListener('DOMContentLoaded', function () {
+        const submissionType = document.getElementById('submission-type');
+        const standardFields = document.getElementById('standard-fields');
+        const reimburseFields = document.getElementById('reimburse-fields');
+        const itemList = document.getElementById('item-list');
+        
+        // Elemen-elemen yang perlu diatur `required` di form standard
+        const standardInputs = standardFields.querySelectorAll('input:not([type="file"]), select, textarea');
+        const standardFile = document.getElementById('surat-file');
+
+        // Elemen-elemen yang perlu diatur `required` di form reimburse (base fields)
+        const baseReimburseInputs = reimburseFields.querySelectorAll('.reimburse-grid input:not([type="file"]), .reimburse-grid select, .reimburse-grid textarea');
+
+
+        function setRequired(elements, isRequired) {
+            elements.forEach(el => {
+                // Kecuali field yang opsional (pengganti)
+                if (el.id !== 'replacement-name' && el.id !== 'replacement-nik' && el.id !== 'replacement-wa') {
+                    if (isRequired) {
+                        el.setAttribute('required', 'required');
+                    } else {
+                        el.removeAttribute('required');
+                    }
+                }
+            });
+        }
+        
+        // Fungsi utama untuk menampilkan/menyembunyikan form
+        window.toggleForm = function () {
+            const selectedType = submissionType.value;
+
+            // Atur visibility
+            standardFields.style.display = (selectedType === 'Reimburse' || selectedType === '') ? 'none' : 'block';
+            reimburseFields.style.display = (selectedType === 'Reimburse') ? 'block' : 'none';
+
+            // Reset semua required
+            setRequired(standardInputs, false);
+            setRequired(baseReimburseInputs, false);
+            standardFile.removeAttribute('required');
+            
+            // Hapus semua item list dan buat satu item baru setiap kali Reimburse dipilih
+            if (itemList) {
+                itemList.innerHTML = '';
+            }
+            
+            // Atur required untuk form yang aktif
+            if (selectedType === 'Reimburse') {
+                setRequired(baseReimburseInputs, true);
+                // Tambahkan item pertama secara otomatis saat Reimburse dipilih
+                addReimbursementRow(); 
+            } else if (selectedType !== '') {
+                 // Cuti/Izin/Sakit
+                setRequired(standardInputs, true);
+                standardFile.setAttribute('required', 'required');
+            }
+        }
+        
+        // Fungsi untuk menghapus baris item
+        window.removeReimbursementRow = function(event) {
+            event.preventDefault();
+            const rowToRemove = event.target.closest('.reimburse-item-row');
+            if (rowToRemove) {
+                rowToRemove.remove();
+            }
+            // Pastikan setidaknya ada satu item yang tersisa
+            if (itemList.children.length === 0) {
+                 addReimbursementRow();
+            }
+        }
+        
+        // Fungsi untuk menambahkan baris item baru
+        window.addReimbursementRow = function(event) {
+            if (event) event.preventDefault();
+            itemList.insertAdjacentHTML('beforeend', ITEM_TEMPLATE);
+        }
+        
+        // Panggil saat halaman dimuat untuk memastikan tampilan awal sudah benar
+        toggleForm(); 
+    });
+</script>
 </body>
+
 </html>
 
 <?php

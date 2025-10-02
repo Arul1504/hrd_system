@@ -81,7 +81,7 @@ $filter_proyek = $_GET['proyek'] ?? '';
 $filter_jabatan = $_GET['jabatan'] ?? '';
 $filter_status_karyawan = $_GET['status_karyawan'] ?? '';
 $filter_status = $_GET['status_aktif'] ?? '';
-
+$filter_sub_cnaf = $_GET['sub_cnaf'] ?? ''; // <--- TAMBAHAN INI
 // Query
 $sql = "SELECT *, role FROM karyawan WHERE 1=1";
 $params = [];
@@ -97,6 +97,11 @@ if ($search_query !== '') {
 if ($filter_proyek !== '') {
     $sql .= " AND proyek = ?";
     $params[] = &$filter_proyek;
+    $types .= "s";
+}
+if ($filter_proyek === 'CNAF' && $filter_sub_cnaf !== '') {
+    $sql .= " AND sub_project_cnaf = ?";
+    $params[] = &$filter_sub_cnaf;
     $types .= "s";
 }
 if ($filter_jabatan !== '') {
@@ -207,7 +212,7 @@ $conn->close();
         }
 
         .download-btn:nth-child(1) {
-            background: #e74c3c
+            background: #03931eff
         }
 
         .download-btn:nth-child(1):hover {
@@ -645,14 +650,37 @@ $conn->close();
                                     echo "<option value='" . e($sk) . "' $sel>" . e($sk) . "</option>";
                                 } ?>
                             </select>
+                            <?php if ($filter_proyek === 'CNAF'): ?>
+                                <select name="sub_cnaf" onchange="this.form.submit()">
+                                    <option value="">Semua Bagian CNAF</option>
+                                    <?php
+                                    $cnaf_sub_list = [
+                                        'SPR&BRO',
+                                        'FORM BEDA TTD',
+                                        'SBI ZONA B',
+                                        'SBI ZOBA A',
+                                        'SPR&BRO SENIOR',
+                                        'REFINANCING',
+                                        'recovery',
+                                        'RC ZONA A',
+                                        'RC ZONA B',
+                                        'DC ZONA A',
+                                        'DC ZONA B',
+                                        'RC ROLL BACK',
+                                        'RC QC'
+                                    ];
+                                    foreach ($cnaf_sub_list as $cs) {
+                                        $sel = ($filter_sub_cnaf === $cs) ? 'selected' : '';
+                                        echo "<option value='" . e($cs) . "' $sel>" . e($cs) . "</option>";
+                                    }
+                                    ?>
+                                </select>
+                            <?php endif; ?>
                         </div>
                     </form>
                 </div>
                 <div class="action-buttons">
-                    <a class="download-btn"
-                        href="export_karyawan_pdf.php?search=<?= urlencode($search_query) ?>&proyek=<?= urlencode($filter_proyek) ?>&jabatan=<?= urlencode($filter_jabatan) ?>&status_karyawan=<?= urlencode($filter_status_karyawan) ?>&status_aktif=<?= urlencode($filter_status) ?>">
-                        <i class="fas fa-file-pdf"></i> Unduh PDF
-                    </a>
+
                     <a class="download-btn"
                         href="export_karyawan_excel.php?search=<?= urlencode($search_query) ?>&proyek=<?= urlencode($filter_proyek) ?>&jabatan=<?= urlencode($filter_jabatan) ?>&status_karyawan=<?= urlencode($filter_status_karyawan) ?>&status_aktif=<?= urlencode($filter_status) ?>">
                         <i class="fas fa-file-excel"></i> Unduh Excel
@@ -699,6 +727,14 @@ $conn->close();
                                                 data-proyek="<?= e($employee['proyek'] ?? '') ?>" title="Ubah"
                                                 onclick="openEditModal('<?= e($employee['id_karyawan']) ?>','<?= e($employee['proyek'] ?? '') ?>'); return false;"><i
                                                     class="fas fa-edit"></i></a>
+                                            <?php if (($employee['proyek'] ?? '') === 'CNAF'): ?>
+                                                <a href="./surat/view_surat_rekening.php?id=<?= e($employee['id_karyawan']) ?>"
+                                                    class="action-btn"
+                                                    style="background:#007bff; color:white; width: 42px; height: 36px;"
+                                                    title="Lihat Surat Rekening" target="_blank">
+                                                    <i class="fas fa-file-invoice"></i>
+                                                </a>
+                                            <?php endif; ?>
                                             <button type="button" class="action-btn delete-btn"
                                                 data-id="<?= e($employee['id_karyawan']) ?>" title="Hapus"
                                                 onclick="confirmDelete('<?= e($employee['id_karyawan']) ?>')"><i
@@ -901,16 +937,7 @@ $conn->close();
             const subCnafWrap = document.getElementById('sub_project_cnaf_wrap');
             const subCnafSelect = document.getElementById('sub_project_cnaf');
 
-            projectSelect.addEventListener('change', function () {
-                if (this.value === 'CNAF') {
-                    subCnafWrap.style.display = 'block';
-                    subCnafSelect.setAttribute('required', 'required');
-                } else {
-                    subCnafWrap.style.display = 'none';
-                    subCnafSelect.removeAttribute('required');
-                    subCnafSelect.value = ''; // reset
-                }
-            });
+
             projectSelect.addEventListener('change', function () {
                 if (this.value === 'CNAF') {
                     subCnafWrap.style.display = 'block';
@@ -940,10 +967,10 @@ $conn->close();
                     // Panggil dengan sub-project jika CNAF yang terpilih saat modal dibuka
                     const proj = projectSelect.value;
                     const subProj = proj === 'CNAF' ? subCnafSelect.value : null;
-                    renderFormForProject(proj, subProj);
+                    renderFormForProject(proj, subProj); // <--- INI PENTING
                 }
             };
-            window.openModal = function () { if (addModal) { addModal.style.display = "block"; renderFormForProject(projectSelect.value); } };
+
             window.closeModal = function (modalId = 'addEmployeeModal') { document.getElementById(modalId).style.display = "none"; };
             window.closeViewModal = function () { if (viewModal) viewModal.style.display = "none"; };
             window.closeEditModal = function () { if (editModal) editModal.style.display = "none"; };
@@ -1039,7 +1066,10 @@ $conn->close();
                                 ["Nama SM (CIMB)", data.nama_sm], ["Nama SH (CIMB)", data.nama_sh],
                                 ["Tanggal Pernyataan (SMBCI)", fmtDate(data.tanggal_pernyataan)],
                                 ["Nomor Surat Tugas (SMBCI)", data.nomor_surat_tugas], ["Masa Penugasan (SMBCI)", data.masa_penugasan],
-                                ["Nama User (SMBCI)", data.nama_user]
+                                ["Nama User (SMBCI)", data.nama_user], ["Tanggal Pembuatan", data.tanggal_pembuatan], ["SPR & BRO", data.spr_bro], ["BM/SM", data.nama_bm_sm],["TL", data.nama_tl],
+                                ["level", data.level], ["Tanggal PKM", data.tanggal_pkm], ["SM / CM", data.nama_sm_cm], ["SBI", data.sbi], ["Tanggal SIGN KONTRAK", data. tanggal_sign_kontrak],
+                                ["Nama OH", data.nama_oh], ["Jabatan Sebelumnya", data.jabatan_sebelumnya], ["BM", data.nama_bm], ["Allowance", data.allowance], ["Tunjangan Kesehatan", data.tunjangan_kesehatan],
+                                 ["OM", data.om],  ["Nama CM", data.nama_cm],
                             ];
                             if (gridPekerjaan) gridPekerjaan.innerHTML = pekerjaan.map(([l, v]) => card(l, v)).join("");
 
@@ -1112,7 +1142,7 @@ $conn->close();
                     "level",
                     "nama_ayah",
                     "nama_ibu",
-                    "role"
+                    "status_karyawan"
                 ],
                 "FORM BEDA TTD": [
                     "nama_karyawan",      // 1. nama
@@ -1127,7 +1157,7 @@ $conn->close();
                     "tanggal_pkm",        // 10. Tanggal pkm (Diasumsikan nama field 'tanggal_pkm' di DB)
                     "jabatan",            // 11. Posisi (Diasumsikan: jabatan)
                     "nama_sm_cm",         // 12. Sm/cm (Diasumsikan nama field 'nama_sm_cm' di DB)
-                    "role"
+                    "status_karyawan"
                 ],
                 "SBI ZONA A": [
                     "no",                    // 1. No
@@ -1154,7 +1184,7 @@ $conn->close();
                     "alamat_email",          // 21. Alamat email
                     "jenis_kelamin",         // 22. Jenis kelamin
 
-                    "role"
+                    "status_karyawan"
                 ],
                 "SBI ZONA B": [
                     "no",                    // 1. No
@@ -1181,7 +1211,7 @@ $conn->close();
                     "alamat_email",          // 21. Alamat email
                     "jenis_kelamin",         // 22. Jenis kelamin
 
-                    "role"
+                    "status_karyawan"
                 ],
                 "SPR&BRO SENIOR": [
                     "no",                    // 1. No
@@ -1211,7 +1241,7 @@ $conn->close();
                     "level",                 // 25. Level
 
 
-                    "role"
+                    "status_karyawan"
                 ],
                 "REFINANCING": [ // Menggunakan uppercase sesuai opsi HTML Anda
                     "no",                    // 1. No
@@ -1236,7 +1266,7 @@ $conn->close();
                     "alamat_email",          // 20. Alamat Email
                     "jenis_kelamin",         // 21. Jenis Kelamin
 
-                    "role"
+                    "status_karyawan"
                 ],
                 "recovery": [ // Menggunakan lowercase sesuai opsi HTML Anda
                     "no",                    // 1. No
@@ -1260,7 +1290,7 @@ $conn->close();
                     "alamat_email",          // 19. Alamat Email
                     "jenis_kelamin",         // 20. Jenis Kelamin
 
-                    "role"
+                    "status_karyawan"
                 ],
                 "RC ZONA A": [
                     "no",                    // 1. No
@@ -1285,7 +1315,7 @@ $conn->close();
                     "om",                    // 20. OM (Diasumsikan field 'om')
 
                     // Field standar yang mungkin tetap dibutuhkan:
-                    "role"              // Jabatan seringkali diperlukan di semua form
+                    "status_karyawan"            // Jabatan seringkali diperlukan di semua form
                 ],
                 "RC ZONA B": [
                     "no",                    // 1. No
@@ -1310,7 +1340,7 @@ $conn->close();
                     "nama_cm",               // 20. Nama CM (Diasumsikan field 'nama_cm')
 
                     // Field standar yang mungkin tetap dibutuhkan:
-                    "role"
+                    "status_karyawan"
                 ],
                 "DC ZONA A": [
                     "no",                    // 1. No
@@ -1338,7 +1368,7 @@ $conn->close();
                     "status",                // 23. Status (Status Aktif)
 
                     // Field standar yang mungkin tetap dibutuhkan:
-                    "role"
+                    "status_karyawan"
                 ],
                 "DC ZONA B": [
                     "no",                    // 1. No
@@ -1365,7 +1395,7 @@ $conn->close();
                     "nik_karyawan",          // 22. Nik (NIK Karyawan)
                     "status",                // 23. Status (Status Aktif/Tidak Aktif)
 
-                    "role"
+                    "status_karyawan"
                 ],
                 "RC ROLL BACK": [
                     "no",                    // 1. No
