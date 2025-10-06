@@ -235,11 +235,12 @@ $conn->close();
                                 <li><a href="./data_karyawan/karyawan_nonaktif.php">Non-Aktif</a></li>
                             </ul>
                         </li>
-                        <li class="dropdown-trigger">
+                       <li class="dropdown-trigger">
                             <a href="#" class="dropdown-link"><i class="fas fa-users"></i> Data Pengajuan <i class="fas fa-caret-down"><span class="badge"><?= $total_pending ?></span></i></a>
                             <ul class="dropdown-menu">
                                 <li><a href="./pengajuan/pengajuan.php">Pengajuan</a></li>
                                 <li><a href="./pengajuan/kelola_pengajuan.php">Kelola Pengajuan<span class="badge"><?= $total_pending ?></span></a></li>
+                                <li><a href="./pengajuan/kelola_reimburse.php">Kelola Reimburse<span class="badge"><?= $total_pending ?></span></a></li>
                             </ul>
                         </li>
                         <li><a href="./monitoring_kontrak/monitoring_kontrak.php"><i class="fas fa-calendar-alt"></i> Monitoring Kontrak</a></li>

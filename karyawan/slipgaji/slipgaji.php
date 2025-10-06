@@ -171,8 +171,8 @@ function bulanNama($b){
               <td><?= number_format((int)$s['total_potongan'],0,',','.') ?></td>
               <td><b><?= number_format((int)$s['total_payroll'],0,',','.') ?></b></td>
               <td>
-                <a class="btn" href="../../admin/payslip/export_payroll_pdf.php?id=<?= (int)$s['id'] ?>" target="_blank">Unduh PDF</a>
-              </td>
+                <a class="btn" href="./view_slip.php?id=<?= (int)$s['id'] ?>&download=true" target="_blank">Unduh PDF</a>
+              </td>
             </tr>
           <?php endforeach; endif; ?>
           </tbody>

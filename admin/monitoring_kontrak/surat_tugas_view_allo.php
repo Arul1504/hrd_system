@@ -22,7 +22,7 @@ if (!isset($_SESSION['id_karyawan']) || !in_array($_SESSION['role'] ?? '', ['HRD
 
 // Ambil parameter
 $id = (int) ($_GET['id'] ?? 0);
-$q = $conn->prepare("SELECT st.*, k.nama_karyawan, k.nik_ktp, k.jabatan, k.proyek, k.alamat_email,k.no_hp,
+$q = $conn->prepare("SELECT st.*, k.nama_karyawan, k.nik_ktp, k.jabatan, k.proyek, k.alamat_email,k.no_hp,k.sales_code,
                             k.alamat AS alamat_karyawan
                      FROM surat_tugas st
                      JOIN karyawan k ON k.id_karyawan = st.id_karyawan
@@ -142,61 +142,52 @@ $email_tujuan = $r['email'] ?? '';
         /* KOP */
         .kop {
             display: flex;
-            gap: 14px;
             align-items: center;
+            gap: 8px;
+            /* jarak sangat dekat agar "nempel tapi tetap rapi" */
             border-bottom: 2px solid #2c3e50;
-            padding-bottom: 10px;
+            padding-bottom: 12px;
             margin-bottom: 14px;
         }
 
-        .kop img {
-            width: 70px;
-            height: auto
+        .kop .logo {
+            width: 75px;
+            height: auto;
         }
 
-        .kop .info {
-            flex-grow: 1;
-            text-align: center
+        .kop-text {
+            display: flex;
+            flex-direction: column;
         }
 
-        .kop .title {
-            line-height: 1.05;
-            font-weight: 700;
-            letter-spacing: .2px;
-            margin-bottom: 5px;
+        .kop-title {
+            font-size: 20px;
+            font-weight: 800;
+            line-height: 1.2;
         }
 
-        .kop .title .pt {
-            font-size: 20pt;
-            color: #111
+        .kop-title .m {
+            color: #080808ff;
         }
 
-        .kop .title .brand {
-            font-size: 20pt;
-            font-weight: 800
-        }
-
-        .kop .title .brand .m {
-            color: var(--merah)
-        }
-
-        .kop .title .brand .a {
-            color: #000
-        }
-
-        .kop .title .brand .u {
-            color: var(--merah)
-        }
-
-        .kop .detail {
-            font-size: 9pt;
-            color: #444;
-            line-height: 1.3
-        }
-
-        .kop .detail a {
+        .kop-title .a {
             color: #111;
-            text-decoration: underline
+        }
+
+        .kop-title .u {
+            color: #050404ff;
+        }
+
+        .kop-alamat {
+            font-size: 13px;
+            color: #444;
+            line-height: 1.4;
+            margin-top: 4px;
+        }
+
+        .kop-alamat a {
+            color: #0056b3;
+            text-decoration: underline;
         }
 
         /* Judul & Nomor */
@@ -451,12 +442,14 @@ $email_tujuan = $r['email'] ?? '';
                         </ul>
                     </li>
                     <li class="dropdown-trigger">
-                        <a href="#" class="dropdown-link"><i class="fas fa-envelope-open-text"></i> Data Pengajuan
-                            <span class="badge"><?= $total_pending ?></span> <i class="fas fa-caret-down"></i></a>
+                        <a href="#" class="dropdown-link"><i class="fas fa-users"></i> Data Pengajuan <i
+                                class="fas fa-caret-down"><span class="badge"><?= $total_pending ?></span></i></a>
                         <ul class="dropdown-menu">
                             <li><a href="../pengajuan/pengajuan.php">Pengajuan</a></li>
-                            <li><a href="../pengajuan/kelola_pengajuan.php">Kelola Pengajuan
-                                    <span class="badge"><?= $total_pending ?></span></a></li>
+                            <li><a href="../pengajuan/kelola_pengajuan.php">Kelola Pengajuan<span
+                                        class="badge"><?= $total_pending ?></span></a></li>
+                            <li><a href="../pengajuan/kelola_reimburse.php">Kelola Reimburse<span
+                                        class="badge"><?= $total_pending ?></span></a></li>
                         </ul>
                     </li>
                     <li><a href="../monitoring_kontrak/monitoring_kontrak.php"><i class="fas fa-calendar-alt"></i>
@@ -484,18 +477,20 @@ $email_tujuan = $r['email'] ?? '';
             <!-- Isi Surat -->
             <section class="surat" id="surat-tugas-dokumen">
                 <div class="kop">
-                    <img src="../image/manu.png" alt="Logo">
-                    <div class="info">
-                        <div class="title">
-                            <div class="pt">PT. <span class="brand"><span class="m">MANDIRI</span> <span
-                                        class="a">ANDALAN</span> <span class="u">UTAMA</span></span></div>
+                    <img src="../image/manu.png" alt="Logo" class="logo">
+                    <div class="kop-text">
+                        <div class="kop-title">
+                            PT. <span class="m">MANDIRI</span> <span class="a">ANDALAN</span> <span
+                                class="u">UTAMA</span>
                         </div>
-                        <div class="detail">
-                            Jl. Sultan Iskandar Muda No. 30 A-B Lt. 3 Jakarta Selatan 12240<br>
-                            Telp: (021) 27081513 &nbsp; | &nbsp; Web:
-                            <a href="http://www.manu.co.id/">http://www.manu.co.id/</a>
+                        <div class="kop-alamat">
+                            Jl. Sultan Iskandar Muda No. 30 A – B Lt. 3, Arteri Pondok Indah<br>
+                            Kebayoran Lama Selatan – Jakarta Selatan 12240<br>
+                            Telp: (021) 27518306 &nbsp;&nbsp; Web: <a
+                                href="http://www.manu.co.id/">http://www.manu.co.id/</a>
                         </div>
                     </div>
+
                 </div>
 
                 <div class="judul">SURAT TUGAS</div>

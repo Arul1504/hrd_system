@@ -18,7 +18,7 @@ if (!isset($_SESSION['id_karyawan']) || !in_array($_SESSION['role'] ?? '', ['HRD
 $id = (int)($_GET['id'] ?? 0);
 
 // Ambil data surat + karyawan
-$q = $conn->prepare("SELECT st.*, k.nama_karyawan, k.nik_ktp, k.jabatan, k.proyek, k.join_date,
+$q = $conn->prepare("SELECT st.*, k.nama_karyawan, k.nik_ktp, k.jabatan, k.proyek, k.join_date, k.sales_code,
                             k.alamat AS alamat_karyawan
                      FROM surat_tugas st
                      JOIN karyawan k ON k.id_karyawan = st.id_karyawan
@@ -66,7 +66,7 @@ $jabatan      = ($r['posisi'] ?? '') ?: ($r['jabatan'] ?? '-');
 $salesCode    = $r['sales_code'] ?? '-';
 $penempatan   = $r['penempatan'] ?? '-';                 // Cabang
 $alamatKantor = $r['alamat_penempatan'] ?? '-';
-$alamatTeks   = $r['alamat_penempatan'] ?? '-';
+$alamatTeks   = $r['alamat_karyawan'] ?? '-';
 
 $efektif      = $r['join_date'] ?? null;                 // Efektif Penempatan
 $tglSurat     = $r['tgl_pembuatan'] ?? date('Y-m-d');
@@ -99,24 +99,46 @@ $file_no_surat = preg_replace('/[^A-Za-z0-9-]+/','-', $noSurat ?: 'tanpa-nomor')
     }
 
     /* Header sesuai gambar */
-    .kop{
-      display:grid; grid-template-columns:84px 1fr; gap:14px; align-items:center;
-      border-bottom:2px solid #2c3e50; padding-bottom:10px; margin-bottom:14px;
-    }
-    .kop img{width:72px;height:auto}
-    .kop .title{
-      line-height:1.05; font-weight:700; letter-spacing:.2px;
-    }
-    .kop .title .pt{font-size:26px; color:#111}
-    .kop .title .brand{font-size:26px; font-weight:800}
-    .kop .title .brand .m{color:var(--merah)}
-    .kop .title .brand .a{color:var(--hijau)}
-    .kop .title .brand .u{color:var(--merah)}
-    .kop .addr{
-      grid-column:1 / -1; text-align:center; margin-top:6px; font-size:12.5px; color:#444;
-      line-height:1.45;
-    }
-    .kop .addr a{color:#111;text-decoration:underline}
+    .kop {
+  display: flex;
+  align-items: center;
+  gap: 8px; /* jarak sangat dekat agar "nempel tapi tetap rapi" */
+  border-bottom: 2px solid #2c3e50;
+  padding-bottom: 12px;
+  margin-bottom: 14px;
+}
+
+.kop .logo {
+  width: 75px;
+  height: auto;
+}
+
+.kop-text {
+  display: flex;
+  flex-direction: column;
+}
+
+.kop-title {
+  font-size: 20px;
+  font-weight: 800;
+  line-height: 1.2;
+}
+
+.kop-title .m { color: #080808ff; }
+.kop-title .a { color: #111; }
+.kop-title .u { color: #050404ff; }
+
+.kop-alamat {
+  font-size: 13px;
+  color: #444;
+  line-height: 1.4;
+  margin-top: 4px;
+}
+
+.kop-alamat a {
+  color: #0056b3;
+  text-decoration: underline;
+}
 
     /* Judul & nomor */
     .judul{
@@ -235,15 +257,14 @@ $file_no_surat = preg_replace('/[^A-Za-z0-9-]+/','-', $noSurat ?: 'tanpa-nomor')
               <li><a href="../data_karyawan/karyawan_nonaktif.php">Non-Aktif</a></li>
             </ul>
           </li>
-          <li class="dropdown-trigger">
-            <a href="#" class="dropdown-link"><i class="fas fa-envelope-open-text"></i> Data Pengajuan
-              <span class="badge"><?= $total_pending ?></span> <i class="fas fa-caret-down"></i></a>
-            <ul class="dropdown-menu">
-              <li><a href="../pengajuan/pengajuan.php">Pengajuan</a></li>
-              <li><a href="../pengajuan/kelola_pengajuan.php">Kelola Pengajuan
-                <span class="badge"><?= $total_pending ?></span></a></li>
-            </ul>
-          </li>
+         <li class="dropdown-trigger">
+                            <a href="#" class="dropdown-link"><i class="fas fa-users"></i> Data Pengajuan <i class="fas fa-caret-down"><span class="badge"><?= $total_pending ?></span></i></a>
+                            <ul class="dropdown-menu">
+                                <li><a href="../pengajuan/pengajuan.php">Pengajuan</a></li>
+                                <li><a href="../pengajuan/kelola_pengajuan.php">Kelola Pengajuan<span class="badge"><?= $total_pending ?></span></a></li>
+                                <li><a href="../pengajuan/kelola_reimburse.php">Kelola Reimburse<span class="badge"><?= $total_pending ?></span></a></li>
+                            </ul>
+                        </li>
           <li><a href="../monitoring_kontrak/monitoring_kontrak.php"><i class="fas fa-calendar-alt"></i> Monitoring Kontrak</a></li>
           <li class="active"><a href="surat_tugas_history.php"><i class="fas fa-file-alt"></i> Riwayat Surat Tugas</a></li>
           <li><a href="../payslip/e_payslip_admin.php"><i class="fas fa-money-check-alt"></i> E-Pay Slip</a></li>
@@ -265,15 +286,17 @@ $file_no_surat = preg_replace('/[^A-Za-z0-9-]+/','-', $noSurat ?: 'tanpa-nomor')
       <section class="surat" id="surat-tugas-dokumen">
         <!-- Kop -->
         <div class="kop">
-          <img src="../image/manu.png" alt="Logo">
-          <div class="title">
-            <div class="pt">PT. <span class="brand"><span class="m">MANDIRI</span> <span class="a">ANDALAN</span> <span class="u">UTAMA</span></span></div>
-            <div class="addr">
-              Jl. Sultan Iskandar Muda No. 30 A – B Lt. 3, Arteri Pondok Indah<br>
-              Kebayoran Lama Selatan – Kebayoran Lama – Jakarta Selatan 12240<br>
-              Telp: (021) 27518306&nbsp;&nbsp; Web: <a href="http://www.manu.co.id/">http://www.manu.co.id/</a>
-            </div>
-          </div>
+  <img src="../image/manu.png" alt="Logo" class="logo">
+  <div class="kop-text">
+    <div class="kop-title">
+      PT. <span class="m">MANDIRI</span> <span class="a">ANDALAN</span> <span class="u">UTAMA</span>
+    </div>
+    <div class="kop-alamat">
+      Jl. Sultan Iskandar Muda No. 30 A – B Lt. 3, Arteri Pondok Indah<br>
+      Kebayoran Lama Selatan – Jakarta Selatan 12240<br>
+      Telp: (021) 27518306 &nbsp;&nbsp; Web: <a href="http://www.manu.co.id/">http://www.manu.co.id/</a>
+    </div>
+  </div>
         </div>
 
         <!-- Judul & Nomor -->
@@ -359,7 +382,7 @@ $file_no_surat = preg_replace('/[^A-Za-z0-9-]+/','-', $noSurat ?: 'tanpa-nomor')
 
     function downloadSuratAsPDF(fileNamePrefix){
       const element = document.getElementById('surat-tugas-dokumen');
-      const opt = { margin: [6,6,6,6], filename:`Surat-Tugas-${fileNamePrefix}.pdf`, image:{type:'jpeg',quality:0.98}, html2canvas:{scale:2,useCORS:true}, jsPDF:{unit:'mm',format:'a4',orientation:'portrait'} };
+      const opt = { margin: [6,6,6,6], filename:Surat-Tugas-${fileNamePrefix}.pdf, image:{type:'jpeg',quality:0.98}, html2canvas:{scale:2,useCORS:true}, jsPDF:{unit:'mm',format:'a4',orientation:'portrait'} };
       html2pdf().from(element).set(opt).save();
     }
   </script>

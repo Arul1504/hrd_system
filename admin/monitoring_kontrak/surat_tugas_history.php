@@ -44,14 +44,20 @@ $sql_posisi = "SELECT DISTINCT posisi FROM surat_tugas WHERE posisi IS NOT NULL 
 $result_posisi = $conn->query($sql_posisi);
 $all_posisi = $result_posisi->fetch_all(MYSQLI_ASSOC);
 
+$proyek_surat_tugas = ['ALLO', 'CIMB', 'CNAF'];
+$proyek_in_clause = "'" . implode("','", $proyek_surat_tugas) . "'";
+
 $sql = "
-    SELECT 
-        st.id, st.no_surat, st.tgl_pembuatan, st.file_path, st.posisi, st.penempatan, st.sales_code, st.alamat_penempatan,
-        k.nama_karyawan, k.proyek, k.jabatan, k.id_karyawan
-    FROM surat_tugas st
-    JOIN karyawan k ON st.id_karyawan = k.id_karyawan
-    WHERE 1=1
+SELECT 
+    st.id, st.no_surat, st.tgl_pembuatan, st.file_path, st.posisi, st.penempatan, st.sales_code, st.alamat_penempatan,
+    k.nama_karyawan, k.proyek, k.jabatan, k.id_karyawan, k.sub_project_cnaf
+FROM surat_tugas st
+JOIN karyawan k ON st.id_karyawan = k.id_karyawan
+WHERE 1=1
+    AND k.proyek IN ({$proyek_in_clause})
+    AND TRIM(COALESCE(k.sales_code, '')) <> ''
 ";
+
 
 $params = [];
 $types = '';
@@ -78,16 +84,16 @@ if ($stmt) {
     $surat_history = [];
     // Log error koneksi atau prepare statement jika diperlukan
 }
-
 $proyek_surat_tugas = ['ALLO', 'CIMB', 'CNAF'];
 $proyek_in_clause = "'" . implode("','", $proyek_surat_tugas) . "'"; // 'ALLO','CIMB','CNAF'
 
 $sql_all_employees = "
-    SELECT id_karyawan, nama_karyawan, proyek, jabatan 
+    SELECT id_karyawan, nama_karyawan, proyek, jabatan, sales_code
     FROM karyawan 
     WHERE proyek IN ({$proyek_in_clause}) 
+    AND TRIM(COALESCE(sales_code, '')) <> ''  /* <--- BARIS INI DITAMBAHKAN */
     ORDER BY nama_karyawan ASC
-"; // <--- TAMBAHAN KLAUSA WHERE
+";
 
 $result_all_employees = $conn->query($sql_all_employees);
 $all_employees = $result_all_employees->fetch_all(MYSQLI_ASSOC);
@@ -352,15 +358,14 @@ $conn->close();
                             <li><a href="../data_karyawan/karyawan_nonaktif.php">Non-Aktif</a></li>
                         </ul>
                     </li>
-                    <li class="dropdown-trigger">
-                        <a href="#" class="dropdown-link"><i class="fas fa-users"></i> Data Pengajuan<span
-                                class="badge"><?= $total_pending ?></span> <i class="fas fa-caret-down"></i></a>
-                        <ul class="dropdown-menu">
-                            <li><a href="../pengajuan/pengajuan.php">Pengajuan</a></li>
-                            <li><a href="../pengajuan/kelola_pengajuan.php">Kelola Pengajuan<span
-                                        class="badge"><?= $total_pending ?></span></a></li>
-                        </ul>
-                    </li>
+                   <li class="dropdown-trigger">
+                            <a href="#" class="dropdown-link"><i class="fas fa-users"></i> Data Pengajuan <i class="fas fa-caret-down"><span class="badge"><?= $total_pending ?></span></i></a>
+                            <ul class="dropdown-menu">
+                                <li><a href="../pengajuan/pengajuan.php">Pengajuan</a></li>
+                                <li><a href="../pengajuan/kelola_pengajuan.php">Kelola Pengajuan<span class="badge"><?= $total_pending ?></span></a></li>
+                                <li><a href="../pengajuan/kelola_reimburse.php">Kelola Reimburse<span class="badge"><?= $total_pending ?></span></a></li>
+                            </ul>
+                        </li>
                     <li><a href="../monitoring_kontrak/monitoring_kontrak.php"><i class="fas fa-calendar-alt"></i>
                             Monitoring Kontrak</a></li>
                     <li class="active"><a href="surat_tugas_history.php"><i class="fas fa-file-alt"></i> Riwayat Surat
@@ -408,6 +413,7 @@ $conn->close();
                             <th>Tanggal</th>
                             <th>Nama Karyawan</th>
                             <th>Project</th>
+                            <th>Sub Project</th>
                             <th>Posisi</th>
                             <th>Penempatan</th>
                             <th>Aksi</th>
@@ -425,6 +431,7 @@ $conn->close();
                                     <td><?= e(dmy($row['tgl_pembuatan'])) ?></td>
                                     <td><?= e($row['nama_karyawan']) ?></td>
                                     <td><?= e($row['proyek']) ?></td>
+                                    <td><?= e($row['sub_project_cnaf']) ?></td>
                                     <td><?= e($row['posisi']) ?></td>
                                     <td><?= e($row['penempatan']) ?></td>
                                     <td>
@@ -450,7 +457,7 @@ $conn->close();
                                             <i class="fas fa-eye"></i>
                                         </a>
 
-                                      
+
                                     </td>
                                 </tr>
                             <?php endforeach; ?>
@@ -545,45 +552,8 @@ $conn->close();
         </div>
     </div>
 
-    <!-- MODAL 2: Upload Surat Tugas Manual -->
-    <div id="modalUpload" class="modal">
-        <div class="card">
-            <h3>Upload Surat Tugas Manual</h3>
-            <form id="formUpload" method="post" action="upload_surat_tugas.php" enctype="multipart/form-data">
-                <input type="hidden" name="id_karyawan" id="up_id">
 
-                <div class="grid">
-                    <div class="form-group" style="grid-column:1/3">
-                        <label>Karyawan</label>
-                        <input type="text" id="up_nama_display" readonly>
-                    </div>
-                    <div class="form-group">
-                        <label>Nomor Surat</label>
-                        <input type="text" name="no_surat" placeholder="Cth: ST/MANU/2024/09/001" required>
-                    </div>
-                    <div class="form-group">
-                        <label>Tanggal Pembuatan</label>
-                        <input type="date" name="tgl_pembuatan" value="<?= e(date('Y-m-d')) ?>" required>
-                    </div>
-                    <input type="hidden" name="posisi" id="up_posisi_hidden">
-                    <input type="hidden" name="penempatan" id="up_penempatan_hidden">
-                    <input type="hidden" name="sales_code" id="up_sales_hidden">
-                    <input type="hidden" name="alamat_penempatan" id="up_alamat_hidden">
 
-                    <div class="form-group" style="grid-column:1/3">
-                        <label>Pilih File (.pdf, .doc, .jpg, dll.)</label>
-                        <input type="file" name="file" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png" required>
-                    </div>
-                </div>
-
-                <div class="foot">
-                    <button type="button" class="btn-modal ghost" onclick="closeUpload()">Batal</button>
-                    <button class="btn-modal primary" type="submit"><i class="fa fa-upload"></i> Upload &
-                        Simpan</button>
-                </div>
-            </form>
-        </div>
-    </div>
 
 
     <script>
@@ -592,7 +562,7 @@ $conn->close();
             STANDARD: [
                 { slug: 'st_posisi', label: 'Posisi', placeholder: 'Posisi', type: 'text' },
                 { slug: 'st_penempatan', label: 'Penempatan', placeholder: 'Nama Cabang/Unit', type: 'text' },
-                { slug: 'st_sales', label: 'Sales Code', placeholder: 'Sales Code (opsional)', type: 'text' },
+
                 { slug: 'st_alamat', label: 'Alamat (Penempatan)', placeholder: 'Alamat lengkap penempatan', type: 'textarea', span: 2 },
             ],
             // Field tambahan spesifik CIMB
@@ -609,7 +579,7 @@ $conn->close();
             const yyyy = now.getFullYear();
             const mm = String(now.getMonth() + 1).padStart(2, '0');
             // Generate nomor surat acak, perlu mekanisme backend yang lebih baik
-            return `ST/${(proyek || 'GEN')}/${yyyy}/${mm}/${pad3(Math.floor(Math.random() * 999) + 1)}`;
+            return `ST/${yyyy}/${mm}/${pad3(Math.floor(Math.random() * 999) + 1)}`;
         }
         const ALL_EMPLOYEES = <?= json_encode($all_employees); ?>;
 
@@ -758,14 +728,14 @@ $conn->close();
                 const item = document.createElement('div');
                 item.className = 'picker-item';
                 item.innerHTML = `
-                <div>
-                    <strong>${emp.nama_karyawan}</strong><br>
-                    <span class="picker-meta">${emp.proyek} / ${emp.jabatan || '—'}</span>
-                </div>
-                <div>
-                    <button class="btn-modal primary" onclick="handlePilihAction('${emp.id_karyawan}', '${emp.nama_karyawan}', '${emp.proyek}', '${emp.jabatan || ''}')">Pilih Aksi</button>
-                </div>
-            `;
+        <div>
+            <strong>${emp.nama_karyawan}</strong><br>
+            <span class="picker-meta">${emp.proyek} / ${emp.jabatan || '—'} / Sales Code: ${emp.sales_code}</span>
+        </div>
+        <div>
+            <button class="btn-modal primary" onclick="handlePilihAction('${emp.id_karyawan}', '${emp.nama_karyawan}', '${emp.proyek}', '${emp.jabatan || ''}', '${emp.sales_code || ''}')">Pilih Aksi</button>
+        </div>
+    `;
                 listContainer.appendChild(item);
             });
             if (employees.length === 0) {

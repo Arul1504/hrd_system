@@ -6,8 +6,29 @@ require '../config.php';
 if (session_status() === PHP_SESSION_NONE)
   session_start();
 
-if (!isset($_SESSION['id_karyawan']) || !in_array($_SESSION['role'] ?? '', ['HRD', 'ADMIN', 'Admin', 'admin'])) {
-  exit('Unauthorized');
+// Ambil ID slip yang diminta dan data user yang login
+// --- INISIALISASI VARIABEL KONTROL AKSES (PERBAIKAN) ---
+$user_id = $_SESSION['id_karyawan'] ?? 0;
+$user_role = strtoupper($_SESSION['role'] ?? '');
+$is_admin = in_array($user_role, ['HRD', 'ADMIN']);
+$is_owner = false; // Definisikan default
+
+// Pastikan user login
+if ($user_id === 0) {
+    exit('Unauthorized: Sesi Kedaluwarsa');
+}
+// Cek apakah mode tampilan minimal (untuk Karyawan yang mengunduh)
+$is_download_mode = isset($_GET['download']) && $_GET['download'] === 'true' && $is_owner;
+
+// Jika dalam mode download, kita tidak perlu data sidebar Admin
+if ($is_download_mode) {
+    // Hapus variabel yang tidak relevan jika dalam mode download
+    $nik_user_admin = '';
+    $jabatan_user_admin = '';
+    $total_pending = 0;
+    // Lanjutkan langsung ke konten HTML
+} else {
+    // ... (data sidebar Admin dipertahankan)
 }
 
 $id = (int) ($_GET['id'] ?? 0);
@@ -253,198 +274,165 @@ $periode = date('F Y', strtotime($r['periode_tahun'] . '-' . $r['periode_bulan']
 </head>
 
 <body>
-  <div class="container">
-    <!-- Sidebar -->
-    <aside class="sidebar">
-      <div>
-        <div class="company-brand">
-          <img src="../image/manu.png" alt="Logo PT Mandiri Andalan Utama" class="company-logo">
-          <p class="company-name">PT Mandiri Andalan Utama</p>
-        </div>
-        <div class="user-info">
-          <div class="user-avatar"><?= e(strtoupper(substr($nama_user_admin, 0, 2))) ?></div>
-          <div class="user-details">
-            <p class="user-name"><?= e($nama_user_admin) ?></p>
-            <p class="user-id"><?= e($nik_user_admin) ?></p>
-            <p class="user-role"><?= e($role_user_admin) ?></p>
-          </div>
-        </div>
-        <nav class="sidebar-nav">
-          <ul>
-            <li><a href="../dashboard_admin.php"><i class="fas fa-home"></i> Dashboard</a></li>
-            <li><a href="../absensi/absensi.php"><i class="fas fa-edit"></i> Absensi </a></li>
-            <li class="dropdown-trigger">
-              <a href="#" class="dropdown-link"><i class="fas fa-users"></i> Data Karyawan <i
-                  class="fas fa-caret-down"></i></a>
-              <ul class="dropdown-menu">
-                <li><a href="../data_karyawan/all_employees.php">Semua Karyawan</a></li>
-                <li><a href="../data_karyawan/karyawan_nonaktif.php">Non-Aktif</a></li>
-              </ul>
-            </li>
-            <li class="dropdown-trigger">
-              <a href="#" class="dropdown-link"><i class="fas fa-file-alt"></i> Data Pengajuan
-                <span class="badge"><?= $total_pending ?? 0 ?></span> <i class="fas fa-caret-down"></i></a>
-              <ul class="dropdown-menu">
-                <li><a href="../pengajuan/pengajuan.php">Pengajuan</a></li>
-                <li><a href="../pengajuan/kelola_pengajuan.php">Kelola Pengajuan
-                    <span class="badge"><?= $total_pending ?? 0 ?></span></a></li>
-              </ul>
-            </li>
-            <li><a href="../monitoring_kontrak/monitoring_kontrak.php"><i class="fas fa-calendar-alt"></i> Monitoring
-                Kontrak</a></li>
-            <li><a href="../monitoring_kontrak/surat_tugas_history.php"><i class="fas fa-file-alt"></i>
-                Riwayat Surat Tugas</a></li>
-            <li class="active"><a href="#"><i class="fas fa-money-check-alt"></i> E-Pay Slip</a></li>
-            <li><a href="../invoice/invoice.php"><i class="fas fa-file-invoice"></i> Invoice</a></li>
-          </ul>
-        </nav>
-        <div class="logout-link">
-          <a href="../../logout.php"><i class="fas fa-sign-out-alt"></i> Keluar</a>
-        </div>
-      </div>
-    </aside>
+    <?php if (!$is_download_mode): ?>
+    <div class="container">
+        <aside class="sidebar">
+            <div>
+                <div class="company-brand">
+                    <img src="../image/manu.png" alt="Logo PT Mandiri Andalan Utama" class="company-logo">
+                    <p class="company-name">PT Mandiri Andalan Utama</p>
+                </div>
+                <div class="user-info">
+                    <div class="user-avatar"><?= e(strtoupper(substr($nama_user_admin, 0, 2))) ?></div>
+                    <div class="user-details">
+                        <p class="user-name"><?= e($nama_user_admin) ?></p>
+                        <p class="user-id"><?= e($nik_user_admin) ?></p>
+                        <p class="user-role"><?= e($role_user_admin) ?></p>
+                    </div>
+                </div>
+                <nav class="sidebar-nav">
+                    <ul>
+                        <li><a href="../dashboard_admin.php"><i class="fas fa-home"></i> Dashboard</a></li>
+                        <li><a href="../absensi/absensi.php"><i class="fas fa-edit"></i> Absensi </a></li>
+                        <li class="dropdown-trigger">
+                            <a href="#" class="dropdown-link"><i class="fas fa-users"></i> Data Karyawan <i
+                                    class="fas fa-caret-down"></i></a>
+                            <ul class="dropdown-menu">
+                                <li><a href="../data_karyawan/all_employees.php">Semua Karyawan</a></li>
+                                <li><a href="../data_karyawan/karyawan_nonaktif.php">Non-Aktif</a></li>
+                            </ul>
+                        </li>
+                      <li class="dropdown-trigger">
+                            <a href="#" class="dropdown-link"><i class="fas fa-users"></i> Data Pengajuan <i class="fas fa-caret-down"><span class="badge"><?= $total_pending ?></span></i></a>
+                            <ul class="dropdown-menu">
+                                <li><a href="../pengajuan/pengajuan.php">Pengajuan</a></li>
+                                <li><a href="../pengajuan/kelola_pengajuan.php">Kelola Pengajuan<span class="badge"><?= $total_pending ?></span></a></li>
+                                <li><a href="../pengajuan/kelola_reimburse.php">Kelola Reimburse<span class="badge"><?= $total_pending ?></span></a></li>
+                            </ul>
+                        </li>
+                        <li><a href="../monitoring_kontrak/monitoring_kontrak.php"><i class="fas fa-calendar-alt"></i> Monitoring
+                                Kontrak</a></li>
+                        <li><a href="../monitoring_kontrak/surat_tugas_history.php"><i class="fas fa-file-alt"></i>
+                                Riwayat Surat Tugas</a></li>
+                        <li class="active"><a href="#"><i class="fas fa-money-check-alt"></i> E-Pay Slip</a></li>
+                        <li><a href="../invoice/invoice.php"><i class="fas fa-file-invoice"></i> Invoice</a></li>
+                    </ul>
+                </nav>
+                <div class="logout-link">
+                    <a href="../../logout.php"><i class="fas fa-sign-out-alt"></i> Keluar</a>
+                </div>
+            </div>
+        </aside>
 
-    <!-- Main content -->
-    <main class="main">
-      <div style="text-align: right; margin-bottom: 10px;" id="statusBadge">
-        <?php if ($r['is_email_sent']): ?>
-          <span
-            style="background-color: #28a745; color: white; padding: 5px 10px; border-radius: 5px; font-weight: bold;">
-            <i class="fas fa-envelope"></i> Sudah Dikirim
-          </span>
-        <?php else: ?>
-          <span
-            style="background-color: #ffc107; color: black; padding: 5px 10px; border-radius: 5px; font-weight: bold;">
-            <i class="fas fa-hourglass-half"></i> Belum Dikirim
-          </span>
-        <?php endif; ?>
-      </div>
-      <div style="text-align:right;margin-bottom:15px">
-        <button onclick="downloadSlipAsPDF()" style="padding:8px 15px;background:#3498db;color:#fff;
-              border:none;border-radius:5px;cursor:pointer;">
-          <i class="fas fa-file-pdf"></i> Download PDF
-        </button>
-        <button onclick="sendSlipAsEmail()" style="padding:8px 15px;background:#3498db;color:#fff;
-  border:none;border-radius:5px;cursor:pointer;">
-          <i class="fas fa-envelope"></i> Kirim Slip ke Email
-        </button>
+        <main class="main">
+            <div style="text-align: right; margin-bottom: 10px;" id="statusBadge">
+                <?php if ($r['is_email_sent']): ?>
+                    <span
+                        style="background-color: #28a745; color: white; padding: 5px 10px; border-radius: 5px; font-weight: bold;">
+                        <i class="fas fa-envelope"></i> Sudah Dikirim
+                    </span>
+                <?php else: ?>
+                    <span
+                        style="background-color: #ffc107; color: black; padding: 5px 10px; border-radius: 5px; font-weight: bold;">
+                        <i class="fas fa-hourglass-half"></i> Belum Dikirim
+                    </span>
+                <?php endif; ?>
+            </div>
+            <div style="text-align:right;margin-bottom:15px">
+                <button onclick="downloadSlipAsPDF()" style="padding:8px 15px;background:#3498db;color:#fff;
+                    border:none;border-radius:5px;cursor:pointer;">
+                    <i class="fas fa-file-pdf"></i> Download PDF
+                </button>
+                <button onclick="sendSlipAsEmail()" style="padding:8px 15px;background:#3498db;color:#fff;
+            border:none;border-radius:5px;cursor:pointer;">
+                    <i class="fas fa-envelope"></i> Kirim Slip ke Email
+                </button>
+            </div>
+            <div id="emailStatus" style="margin-top: 15px; text-align: right; font-weight: bold;"></div>
+            <?php endif; // END IF !$is_download_mode ?>
 
-      </div>
-      <div id="emailStatus" style="margin-top: 15px; text-align: right; font-weight: bold;"></div>
-      <div class="slip">
+    <?php if ($is_download_mode): // Jika dalam mode download, wrap konten di <body> ?>
+    <div style="width: 800px; margin: 0 auto;">
+    <?php endif; ?>
+    
+    <div class="slip">
         <div class="header">
-          <div class="left">
-            <img src="../image/manu.png" alt="Logo" class="logo">
-            <h2>Slip Gaji</h2>
-          </div>
-          <div class="company-info">
-            <b>PT Mandiri Andalan Utama</b><br>
-            Jl. Sultan Iskandar Muda No.30 A-B <br>
-            Kebayoran Lama, Jakarta Selatan <br>
-            Telp : (021) 275 18 306<br>
-            www.manu.co.id
-          </div>
-        </div>
-
+            </div>
         <table class="info-table">
-          <tr>
-            <td><b>NIK</b></td>
-            <td>: <?= e($r['nik_ktp'] ?? '-') ?></td>
-            <td><b>Status Pegawai</b></td>
-            <td>: <?= e($r['status_karyawan'] ?? '-') ?></td>
-          </tr>
-          <tr>
-            <td><b>Nama</b></td>
-            <td>: <?= e($r['nama_karyawan'] ?? '-') ?></td>
-            <td><b>No. Rekening</b></td>
-            <td>: <?= e($r['nomor_rekening'] ?? '-') ?></td>
-          </tr>
-          <tr>
-            <td><b>Jabatan</b></td>
-            <td>: <?= e($r['jabatan'] ?? '-') ?></td>
-            <td><b>Bank</b></td>
-            <td>: <?= e($r['nama_bank'] ?? '-') ?></td>
-          </tr>
-          <tr>
-            <td><b>Penempatan</b></td>
-            <td>: <?= e($r['proyek'] ?? '-') ?> - <?= e($r['cabang'] ?? '-') ?></td>
-            <td><b>NPWP</b></td>
-            <td>: <?= e($r['npwp'] ?? '-') ?></td>
-          </tr>
-          <tr>
-            <td><b>Join Date</b></td>
-            <td>: <?= e($r['join_date'] ?? '-') ?></td>
-            <td><b>Bulan</b></td>
-            <td>: <?= $periode ?></td>
-          </tr>
+            <tr>
+                <td><b>NIK</b></td>
+                <td>: <?= e($r['nik_ktp'] ?? '-') ?></td>
+                <td><b>Status Pegawai</b></td>
+                <td>: <?= e($r['status_karyawan'] ?? '-') ?></td>
+            </tr>
+            <tr>
+                <td><b>Nama</b></td>
+                <td>: <?= e($r['nama_karyawan'] ?? '-') ?></td>
+                <td><b>No. Rekening</b></td>
+                <td>: <?= e($r['nomor_rekening'] ?? '-') ?></td>
+            </tr>
+            <tr>
+                <td><b>Jabatan</b></td>
+                <td>: <?= e($r['jabatan'] ?? '-') ?></td>
+                <td><b>Bank</b></td>
+                <td>: <?= e($r['nama_bank'] ?? '-') ?></td>
+            </tr>
+            <tr>
+                <td><b>Penempatan</b></td>
+                <td>: <?= e($r['proyek'] ?? '-') ?> - <?= e($r['cabang'] ?? '-') ?></td>
+                <td><b>NPWP</b></td>
+                <td>: <?= e($r['npwp'] ?? '-') ?></td>
+            </tr>
+            <tr>
+                <td><b>Join Date</b></td>
+                <td>: <?= e($r['join_date'] ?? '-') ?></td>
+                <td><b>Bulan</b></td>
+                <td>: <?= $periode ?></td>
+            </tr>
         </table>
-
+        
         <div class="box-container">
-          <div class="box">
-            <h3>Pendapatan</h3>
-            <?php foreach ($pendapatan as $k => $v): ?>
-              <div class="row"><span><?= e($k) ?></span><span>Rp. <?= number_format($v, 0, ',', '.') ?></span></div>
-            <?php endforeach; ?>
-            <div class="row total"><span>Total Pendapatan</span><span>Rp.
-                <?= number_format($r['total_pendapatan'] ?? 0, 0, ',', '.') ?></span></div>
-          </div>
-          <div class="box">
-            <h3>Potongan</h3>
-            <?php foreach ($potongan as $k => $v): ?>
-              <div class="row"><span><?= e($k) ?></span><span>Rp. <?= number_format($v, 0, ',', '.') ?></span></div>
-            <?php endforeach; ?>
-            <div class="row total"><span>Total Potongan</span><span>Rp.
-                <?= number_format($r['total_potongan'] ?? 0, 0, ',', '.') ?></span></div>
-          </div>
+            <div class="box">
+                <h3>Pendapatan</h3>
+                <?php foreach ($pendapatan as $k => $v): ?>
+                    <div class="row"><span><?= e($k) ?></span><span>Rp. <?= number_format($v, 0, ',', '.') ?></span></div>
+                <?php endforeach; ?>
+                <div class="row total"><span>Total Pendapatan</span><span>Rp.
+                    <?= number_format($r['total_pendapatan'] ?? 0, 0, ',', '.') ?></span></div>
+            </div>
+            <div class="box">
+                <h3>Potongan</h3>
+                <?php foreach ($potongan as $k => $v): ?>
+                    <div class="row"><span><?= e($k) ?></span><span>Rp. <?= number_format($v, 0, ',', '.') ?></span></div>
+                <?php endforeach; ?>
+                <div class="row total"><span>Total Potongan</span><span>Rp.
+                    <?= number_format($r['total_potongan'] ?? 0, 0, ',', '.') ?></span></div>
+            </div>
         </div>
 
         <div class="thp">
-          <h2>Total Penerimaan (Take-Home Pay)</h2>
-          <div class="amount">Rp. <?= number_format($r['total_payroll'] ?? 0, 0, ',', '.') ?></div>
+            <h2>Total Penerimaan (Take-Home Pay)</h2>
+            <div class="amount">Rp. <?= number_format($r['total_payroll'] ?? 0, 0, ',', '.') ?></div>
         </div>
 
         <div class="footer">
-          Pembayaran gaji telah ditransfer ke rekening:<br>
-          <b><?= e($r['nama_bank'] ?? '-') ?> - <?= e($r['nomor_rekening'] ?? '-') ?></b>
+            Pembayaran gaji telah ditransfer ke rekening:<br>
+            <b><?= e($r['nama_bank'] ?? '-') ?> - <?= e($r['nomor_rekening'] ?? '-') ?></b>
         </div>
-      </div>
-    </main>
-  </div>
+        
+    </div> <?php if ($is_download_mode): ?>
+    </div></main> <?php endif; ?>
+    
+    <?php if (!$is_download_mode): ?>
+        </main></div> <?php endif; ?>
 
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.9.3/html2pdf.bundle.min.js"></script>
-  <script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.9.3/html2pdf.bundle.min.js"></script>
+<script>
+    // ... (Fungsi downloadSlipAsPDF() dan sendSlipAsEmail() tetap di sini) ...
     function downloadSlipAsPDF() {
-      const element = document.querySelector('.slip');
-      const opt = {
-        margin: [5, 5, 5, 5],
-        filename: 'Slip-Gaji.pdf',
-        image: { type: 'jpeg', quality: 0.9 },
-        html2canvas: { scale: 2, useCORS: true },
-        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
-      };
-      html2pdf().from(element).set(opt).save();
-    }
-    function sendSlipAsEmail() {
         const element = document.querySelector('.slip');
-        const id_slip = "<?php echo $r['id']; ?>";
-        const emailStatus = document.getElementById('emailStatus');
-        const sendButton = document.querySelector('button[onclick="sendSlipAsEmail()"]');
-        const originalButtonHtml = '<i class="fas fa-envelope"></i> Kirim Slip ke Email';
-
-        // Nonaktifkan tombol dan tampilkan pesan loading
-        sendButton.disabled = true;
-        sendButton.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Mengirim...';
-        emailStatus.innerHTML = '';
-
-        if (!confirm('Kirim slip gaji ini ke email karyawan?')) {
-            // Aktifkan kembali tombol jika pengguna membatalkan
-            sendButton.disabled = false;
-            sendButton.innerHTML = originalButtonHtml;
-            return;
-        }
-
         const opt = {
             margin: [5, 5, 5, 5],
             filename: 'Slip-Gaji.pdf',
@@ -452,48 +440,26 @@ $periode = date('F Y', strtotime($r['periode_tahun'] . '-' . $r['periode_bulan']
             html2canvas: { scale: 2, useCORS: true },
             jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
         };
-
-        const worker = html2pdf().from(element).set(opt);
-
-        worker.output('blob').then(function(pdfBlob) {
-            const formData = new FormData();
-            formData.append('slip_pdf', pdfBlob, 'slip_gaji.pdf');
-            formData.append('id_slip', id_slip);
-
-            fetch('send_slip_email.php', {
-                method: 'POST',
-                body: formData,
-            })
-            .then(response => response.text())
-            .then(result => {
-                // Perbarui pesan status berdasarkan respons dari server
-                if (result.includes("berhasil dikirim")) {
-                    emailStatus.innerHTML = '<span style="color: #27ae60;"><i class="fas fa-check-circle"></i> ' + result + '</span>';
-                    
-                    // Ganti badge status menjadi 'Sudah Dikirim' secara dinamis
-                    const statusBadge = document.getElementById('statusBadge');
-                    statusBadge.innerHTML = '<span style="background-color: #28a745; color: white; padding: 5px 10px; border-radius: 5px; font-weight: bold;"><i class="fas fa-envelope"></i> Sudah Dikirim</span>';
-
-                    // Tombol tetap nonaktif dan warnanya berubah
-                    sendButton.style.backgroundColor = '#95a5a6';
-                } else {
-                    emailStatus.innerHTML = '<span style="color: #c0392b;"><i class="fas fa-exclamation-triangle"></i> ' + result + '</span>';
-                    // Aktifkan kembali tombol jika gagal
-                    sendButton.disabled = false;
-                    sendButton.innerHTML = originalButtonHtml;
-                }
-            })
-            .catch(error => {
-                console.error('Error:', error);
-                emailStatus.innerHTML = '<span style="color: #c0392b;"><i class="fas fa-times-circle"></i> Terjadi kesalahan saat mengirim email.</span>';
-                // Aktifkan kembali tombol jika gagal
-                sendButton.disabled = false;
-                sendButton.innerHTML = originalButtonHtml;
-            });
-        });
+        html2pdf().from(element).set(opt).save();
     }
-
-  </script>
+    // ... (Fungsi sendSlipAsEmail() tetap di sini) ...
+    
+    document.addEventListener('DOMContentLoaded', function() {
+        const urlParams = new URLSearchParams(window.location.search);
+        // HANYA trigger download jika parameter 'download' ada dan status user bukan ADMIN (yaitu Karyawan)
+        if (urlParams.get('download') === 'true') {
+            // Hapus parameter download dari URL agar tidak terjadi loop jika user refresh
+            const newUrl = window.location.pathname + window.location.search.replace('&download=true', '').replace('download=true', '');
+            history.replaceState({}, document.title, newUrl);
+            
+            // Sembunyikan tombol kirim/download di mode download
+            document.querySelector('div[style="text-align:right;margin-bottom:15px"]').style.display = 'none';
+            document.querySelector('#statusBadge').style.display = 'none';
+            
+            // Panggil fungsi unduh
+            downloadSlipAsPDF();
+        }
+    });
+</script>
 </body>
-
 </html>

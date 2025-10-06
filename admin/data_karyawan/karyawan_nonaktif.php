@@ -70,6 +70,15 @@ $sql = "
     FROM karyawan k
     WHERE UPPER(k.status) = 'TIDAK AKTIF'
 ";
+// Ambil data untuk badge di sidebar, KECUALI Reimburse
+$sql_pending_requests = "SELECT COUNT(*) AS total_pending FROM pengajuan WHERE status_pengajuan = 'Menunggu' AND jenis_pengajuan != 'Reimburse'";
+$result_pending_requests = $conn->query($sql_pending_requests);
+$total_pending = $result_pending_requests->fetch_assoc()['total_pending'] ?? 0;
+
+// Query BARU untuk MENGHITUNG HANYA Reimburse yang Menunggu
+$sql_pending_reimburse = "SELECT COUNT(*) AS total_pending FROM pengajuan WHERE jenis_pengajuan = 'Reimburse' AND status_pengajuan = 'Menunggu'";
+$result_pending_reimburse = $conn->query($sql_pending_reimburse);
+$total_pending_reimburse = $result_pending_reimburse->fetch_assoc()['total_pending'] ?? 0;
 
 $params = [];
 $types  = '';

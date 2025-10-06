@@ -1,7 +1,9 @@
 <?php
 /**
- * File: monitoring_kontrak.php (FINAL, aman STRICT MODE)
+ * File: monitoring_kontrak.php (FINAL, aman STRICT MODE, filter sales_code aktif)
  */
+
+declare(strict_types=1); // Pastikan mode ketat aktif
 
 require '../config.php';
 if (session_status() === PHP_SESSION_NONE)
@@ -13,18 +15,21 @@ if (!isset($_SESSION['id_karyawan']) || ($_SESSION['role'] ?? '') !== 'ADMIN') {
     exit();
 }
 
+// Helper functions (Pastikan fungsi e() ada di config.php atau file lain yang di-include)
+if (!function_exists('e')) {
+    function e(?string $s): string {
+        return htmlspecialchars($s ?? '', ENT_QUOTES, 'UTF-8');
+    }
+}
 
-// Helper
-
-
-function dmy($v)
+function dmy(?string $v): string
 {
     if (!$v)
         return '-';
     $t = strtotime($v);
-    return $t ? date('d M Y', $t) : $v;
+    return $t ? date('d M Y', $t) : e($v); // Gunakan e() untuk output
 }
-function safe_iso($v)
+function safe_iso(?string $v): ?string
 {
     if (!$v)
         return null;
@@ -34,12 +39,13 @@ function safe_iso($v)
 
 // Ambil filter
 $filter_proyek = $_GET['proyek'] ?? '';
-$filter_status = $_GET['status'] ?? 'AKTIF'; // default tampilkan AKTIF
+$filter_status = $_GET['status'] ?? '';
 $due_in_days = (int) ($_GET['due_in_days'] ?? 60);
 $search = trim($_GET['s'] ?? '');
 
 $today = date('Y-m-d');
-$due_limit = date('Y-m-d', strtotime("+$due_in_days days"));
+// Batasi hanya untuk kontrak yang jatuh tempo (end_date atau end_of_contract) hingga X hari ke depan
+$due_limit = date('Y-m-d', strtotime("+$due_in_days days")); 
 
 // Ambil data user dari sesi (diubah menjadi ADMIN)
 $id_karyawan_admin = $_SESSION['id_karyawan'];
@@ -47,37 +53,47 @@ $nama_user_admin = $_SESSION['nama'];
 $role_user_admin = $_SESSION['role'];
 
 $stmt_admin_info = $conn->prepare("SELECT nik_ktp, jabatan FROM karyawan WHERE id_karyawan = ?");
-$stmt_admin_info->bind_param("i", $id_karyawan_admin);
-$stmt_admin_info->execute();
-$result_admin_info = $stmt_admin_info->get_result();
-$admin_info = $result_admin_info->fetch_assoc();
+if (!$stmt_admin_info) {
+    error_log("SQL Prepare Error (admin_info): " . $conn->error);
+    $nik_user_admin = 'Error';
+    $jabatan_user_admin = 'Error';
+} else {
+    $stmt_admin_info->bind_param("i", $id_karyawan_admin);
+    $stmt_admin_info->execute();
+    $result_admin_info = $stmt_admin_info->get_result();
+    $admin_info = $result_admin_info->fetch_assoc();
+    if ($admin_info) {
+        $nik_user_admin = $admin_info['nik_ktp'];
+        $jabatan_user_admin = $admin_info['jabatan'];
+    } else {
+        $nik_user_admin = 'Tidak Ditemukan';
+        $jabatan_user_admin = 'Tidak Ditemukan';
+    }
+    $stmt_admin_info->close();
+}
 
 $sql_pending_requests = "SELECT COUNT(*) AS total_pending FROM pengajuan WHERE status_pengajuan = 'Menunggu'";
 $result_pending_requests = $conn->query($sql_pending_requests);
-$total_pending = $result_pending_requests->fetch_assoc()['total_pending'] ?? 0;
+$total_pending = $result_pending_requests ? ($result_pending_requests->fetch_assoc()['total_pending'] ?? 0) : 0;
 
-if ($admin_info) {
-    $nik_user_admin = $admin_info['nik_ktp'];
-    $jabatan_user_admin = $admin_info['jabatan'];
-} else {
-    $nik_user_admin = 'Tidak Ditemukan';
-    $jabatan_user_admin = 'Tidak Ditemukan';
-}
-$stmt_admin_info->close();
 
-// ====================== QUERY (BERSIH & AMAN) ======================
+// ====================== QUERY UTAMA (BERSIH & AMAN) ======================
+
+
 $sql = "
 SELECT
     id_karyawan, nama_karyawan, jabatan, proyek, status, status_karyawan,
-    join_date, end_date, end_of_contract, penempatan, cabang, kota, area,
-    /* due_date aman: convert -> nullif -> str_to_date */
+    join_date, end_date, end_of_contract, penempatan, cabang, kota, area, sales_code, sub_project_cnaf,
     COALESCE(
-        STR_TO_DATE(NULLIF(CONVERT(end_date           , CHAR), ''), '%Y-%m-%d'),
-        STR_TO_DATE(NULLIF(CONVERT(end_of_contract, CHAR), ''), '%Y-%m-%d')
+        STR_TO_DATE(NULLIF(TRIM(end_date), ''), '%Y-%m-%d'),
+        STR_TO_DATE(NULLIF(TRIM(end_of_contract), ''), '%Y-%m-%d')
     ) AS due_date
 FROM karyawan
 WHERE 1=1
+/* AKTIFKAN FILTER: HANYA TAMPILKAN KARYAWAN DENGAN SALES_CODE TIDAK KOSONG */
+AND TRIM(COALESCE(sales_code, '')) <> '' 
 ";
+
 $params = [];
 $types = '';
 
@@ -103,25 +119,6 @@ if ($search !== '') {
     $types .= 'sss';
 }
 
-/* Ambil yang jatuh tempo s.d due_limit (pakai kolom yang sudah dikonversi aman) */
-$sql .= "
-    AND (
-        (
-            STR_TO_DATE(NULLIF(CONVERT(end_date           , CHAR), ''), '%Y-%m-%d') IS NOT NULL
-            AND STR_TO_DATE(CONVERT(end_date           , CHAR), '%Y-%m-%d') <= ?
-        )
-        OR
-        (
-            STR_TO_DATE(NULLIF(CONVERT(end_of_contract, CHAR), ''), '%Y-%m-%d') IS NOT NULL
-            AND STR_TO_DATE(CONVERT(end_of_contract, CHAR), '%Y-%m-%d') <= ?
-        )
-    )
-";
-
-$params[] = $due_limit;
-$params[] = $due_limit;
-$types .= 'ss';
-
 /* Urutkan pakai due_date yang sudah aman */
 $sql .= " ORDER BY due_date ASC, nama_karyawan ASC";
 
@@ -135,6 +132,9 @@ if ($stmt) {
     $res = $stmt->get_result();
     $rows = $res->fetch_all(MYSQLI_ASSOC);
     $stmt->close();
+} else {
+    error_log("SQL Prepare Error (main query): " . $conn->error . " Query: " . $sql);
+    // Handle error, mungkin tampilkan pesan ke user atau log
 }
 
 // Ambil distinct proyek untuk filter dropdown
@@ -173,7 +173,7 @@ unset($_SESSION['flash_msg']);
             min-height: 100vh;
         }
 
-        .main {
+        .main-content { /* Ubah dari .main menjadi .main-content agar konsisten dengan markup Anda */
             padding: 18px 24px 18px 18px;
             overflow-x: auto;
             box-sizing: border-box;
@@ -190,6 +190,7 @@ unset($_SESSION['flash_msg']);
             padding: 9px 12px;
             cursor: pointer;
             font-weight: 500;
+            text-decoration: none; /* Tambahkan ini agar link juga terstyle */
         }
 
         .btn.primary {
@@ -200,27 +201,27 @@ unset($_SESSION['flash_msg']);
         .btn.ghost {
             background: #fff;
             border: 1px solid #e5e7eb;
+            color: #333; /* Tambahkan warna teks default */
         }
 
         /* Table */
-        .table-container {
+        .data-table-container { /* Ubah dari .table-container agar konsisten dengan markup Anda */
             width: 100%;
-            overflow-x: visible;
-            /* Ini bisa menyebabkan pemotongan */
+            overflow-x: auto; /* Ubah visible jadi auto agar ada scroll jika terlalu lebar */
             background: #fff;
             border-radius: 10px;
             box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
         }
 
-        .table {
+        .data-table-container table { /* Ubah dari .table menjadi .data-table-container table */
             width: 100%;
             border-collapse: collapse;
             background: #fff;
-            min-width: 800px;
+            min-width: 1000px; /* Tingkatkan min-width jika kolom banyak */
         }
 
-        .table th,
-        .table td {
+        .data-table-container th,
+        .data-table-container td {
             border-bottom: 1px solid #eef0f3;
             padding: 10px;
             text-align: left;
@@ -228,12 +229,12 @@ unset($_SESSION['flash_msg']);
             position: relative;
         }
 
-        .table th {
+        .data-table-container th {
             background: #f0f2f5;
             font-weight: 600;
         }
 
-        .table tr:hover {
+        .data-table-container tr:hover {
             background: #f9fafb;
         }
 
@@ -247,6 +248,7 @@ unset($_SESSION['flash_msg']);
             justify-content: center;
             padding: 16px;
             z-index: 9999;
+            overflow-y: auto; /* Tambahkan scroll untuk modal jika kontennya panjang */
         }
 
         .modal .card {
@@ -259,6 +261,7 @@ unset($_SESSION['flash_msg']);
 
         .card h3 {
             margin: 0 0 8px;
+            color: #333; /* Tambahkan warna teks */
         }
 
         .grid {
@@ -271,6 +274,7 @@ unset($_SESSION['flash_msg']);
             display: block;
             font-weight: 600;
             margin-bottom: 6px;
+            color: #333;
         }
 
         .grid input,
@@ -279,6 +283,18 @@ unset($_SESSION['flash_msg']);
             padding: 10px;
             border: 1px solid #e5e7eb;
             border-radius: 8px;
+            box-sizing: border-box; /* Penting untuk width 100% dengan padding */
+            font-family: inherit; /* Warisi font agar konsisten */
+        }
+        
+        /* Select box styling */
+        .toolbar select {
+            padding: 10px 12px;
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+            background-color: #fff;
+            font-family: inherit;
+            min-width: 150px;
         }
 
         .card .foot {
@@ -291,20 +307,20 @@ unset($_SESSION['flash_msg']);
         .action-buttons {
             display: flex;
             gap: 8px;
-            /* Memberi jarak antar tombol */
             flex-wrap: nowrap;
-            /* Mencegah tombol turun ke baris baru */
             align-items: center;
         }
 
         .action-buttons .btn.action-btn {
             padding: 6px 10px;
-            /* Atur padding yang lebih kecil agar tidak terlalu besar */
             font-size: 13px;
             white-space: nowrap;
-            /* Mencegah teks terpotong */
         }
 
+        .action-dropdown { /* Kontainer untuk trigger dan menu */
+            position: relative;
+            display: inline-block; /* Agar bisa di-align dengan button lain */
+        }
 
         .action-menu-trigger {
             background: #e0e0e0;
@@ -325,9 +341,7 @@ unset($_SESSION['flash_msg']);
         .action-menu {
             position: absolute;
             right: 0;
-            /* Ganti 'top' dengan 'bottom' */
-            bottom: 100%;
-            /* Ini yang membuat dropdown ke atas */
+            top: 100%; /* Default posisi di bawah trigger */
             z-index: 10;
             background: #fff;
             border: 1px solid #ddd;
@@ -336,9 +350,15 @@ unset($_SESSION['flash_msg']);
             box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
             list-style: none;
             padding: 0;
-            margin-bottom: 5px;
-            /* Memberi sedikit jarak */
+            margin-top: 5px; /* Memberi sedikit jarak */
             display: none;
+        }
+        
+        .action-menu.dropup { /* Kelas untuk menu yang muncul ke atas */
+            top: auto;
+            bottom: 100%;
+            margin-top: 0;
+            margin-bottom: 5px;
         }
 
         .action-menu.active {
@@ -422,6 +442,104 @@ unset($_SESSION['flash_msg']);
             padding: 2px 8px;
             border-radius: 999px;
             font-size: 12px;
+            margin-left: 5px; /* Jarak untuk badge */
+        }
+        
+        .badge.warn {
+            background-color: #f59e0b; /* Orange untuk warning */
+        }
+
+        .badge.due {
+            background-color: #dc2626; /* Merah untuk sangat jatuh tempo */
+        }
+
+        /* Toolbar styles */
+        .toolbar {
+            margin-bottom: 20px;
+        }
+        .search-filter-container {
+            display: flex;
+            flex-wrap: wrap; /* Izinkan wrap pada layar kecil */
+            gap: 10px;
+            align-items: center;
+        }
+        .search-box {
+            display: flex;
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        .search-box input {
+            border: none;
+            padding: 10px;
+            flex-grow: 1;
+            font-family: inherit;
+        }
+        .search-box button {
+            background: #f0f2f5;
+            border: none;
+            padding: 10px 12px;
+            cursor: pointer;
+            color: #333;
+            transition: background 0.2s;
+        }
+        .search-box button:hover {
+            background: #e5e7eb;
+        }
+        .add-button { /* Untuk tombol "Terapkan" */
+            background: #2563eb;
+            color: #fff;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 8px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        .add-button:hover {
+            background: #1d4ed8;
+        }
+        
+        /* Alert messages */
+        .alert {
+            padding: 12px 20px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            font-size: 14px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .alert.success {
+            background-color: #d1fae5;
+            color: #065f46;
+            border: 1px solid #34d399;
+        }
+        .alert.error {
+            background-color: #fee2e2;
+            color: #991b1b;
+            border: 1px solid #ef4444;
+        }
+
+        /* Responsive adjustments */
+        @media (max-width: 768px) {
+            .container {
+                grid-template-columns: 1fr;
+            }
+            .sidebar {
+                display: none; /* Sembunyikan sidebar di mobile, bisa diganti dengan toggle */
+            }
+            .search-filter-container {
+                flex-direction: column;
+                align-items: stretch;
+            }
+            .filter-box, .search-box, .add-button {
+                width: 100%;
+            }
+            .data-table-container table {
+                min-width: 800px; /* Pertahankan min-width untuk tabel */
+            }
         }
     </style>
 </head>
@@ -430,7 +548,7 @@ unset($_SESSION['flash_msg']);
     <div class="container">
         <aside class="sidebar">
             <div class="company-brand">
-                <img src="../image/manu.png" class="company-logo">
+                <img src="../image/manu.png" class="company-logo" alt="Company Logo">
                 <p class="company-name">PT Mandiri Andalan Utama</p>
             </div>
             <div class="user-info">
@@ -454,14 +572,13 @@ unset($_SESSION['flash_msg']);
                         </ul>
                     </li>
                     <li class="dropdown-trigger">
-                        <a href="#" class="dropdown-link"><i class="fas fa-users"></i> Data Pengajuan<span
-                                class="badge"><?= $total_pending ?></span> <i class="fas fa-caret-down"></i></a>
-                        <ul class="dropdown-menu">
-                            <li><a href="../pengajuan/pengajuan.php">Pengajuan</a></li>
-                            <li><a href="../pengajuan/kelola_pengajuan.php">Kelola Pengajuan<span
-                                        class="badge"><?= $total_pending ?></span></a></li>
-                        </ul>
-                    </li>
+                            <a href="#" class="dropdown-link"><i class="fas fa-users"></i> Data Pengajuan <i class="fas fa-caret-down"><span class="badge"><?= $total_pending ?></span></i></a>
+                            <ul class="dropdown-menu">
+                                <li><a href="../pengajuan/pengajuan.php">Pengajuan</a></li>
+                                <li><a href="../pengajuan/kelola_pengajuan.php">Kelola Pengajuan<span class="badge"><?= $total_pending ?></span></a></li>
+                                <li><a href="../pengajuan/kelola_reimburse.php">Kelola Reimburse<span class="badge"><?= $total_pending ?></span></a></li>
+                            </ul>
+                        </li>
                     <li class="active"><a href="../monitoring_kontrak/monitoring_kontrak.php"><i
                                 class="fas fa-calendar-alt"></i> Monitoring Kontrak</a></li>
                     <li><a href="surat_tugas_history.php"><i class="fas fa-file-alt"></i> Riwayat Surat Tugas</a></li>
@@ -526,7 +643,7 @@ unset($_SESSION['flash_msg']);
                         <tr>
                             <th>Nama</th>
                             <th>Project</th>
-                            <th>Jabatan</th>
+                            <th>Sub Project</th> <th>Jabatan</th>
                             <th>Mulai</th>
                             <th>Jatuh Tempo</th>
                             <th>Status</th>
@@ -535,26 +652,36 @@ unset($_SESSION['flash_msg']);
                     </thead>
                     <tbody>
                         <?php if(!$rows): ?>
-                        <tr><td colspan="7" style="text-align:center">Tidak ada data.</td></tr>
-                    <?php else: foreach($rows as $r):
-                        $due = safe_iso($r['due_date']);
-                        $daysLeft = $due ? (int)floor((strtotime($due)-strtotime($today))/86400) : null;
-                        $badgeClass = ($daysLeft!==null && $daysLeft<=14) ? 'badge due' : 'badge warn';
+                        <tr><td colspan="8" style="text-align:center">Tidak ada data.</td></tr>
+                        <?php else: foreach($rows as $r):
+                            $due = safe_iso($r['due_date']);
+                            $daysLeft = $due ? (int)floor((strtotime($due)-strtotime($today))/86400) : null;
+                            $badgeClass = '';
+                            if ($daysLeft !== null) {
+                                if ($daysLeft <= 14) {
+                                    $badgeClass = 'badge due'; // Sangat dekat
+                                } elseif ($daysLeft <= $due_in_days) {
+                                    $badgeClass = 'badge warn'; // Dalam periode peringatan
+                                }
+                            }
 
-                        // --- TAMBAHAN LOGIC PHP: Proyek yang diizinkan untuk Surat Tugas ---
-                        $proyek_surat_tugas = ['ALLO', 'CIMB', 'CNAF'];
-                        $show_surat_tugas = in_array(strtoupper($r['proyek']), $proyek_surat_tugas);
-                        // -------------------------------------------------------------------
-                    ?>
+                            // --- Proyek yang diizinkan untuk Surat Tugas
+                            $proyek_surat_tugas = ['ALLO', 'CIMB', 'CNAF'];
+                            $show_surat_tugas = in_array(strtoupper($r['proyek']), $proyek_surat_tugas);
+                        ?>
                         <tr>
                             <td><?= e($r['nama_karyawan']) ?></td>
-                            <td><?= e($r['proyek']) ?></td>
+                            <td><?= e($r['proyek']) ?></td> <td>
+                                <?= e($r['sub_project_cnaf']) ?> <?php if (!empty($r['sales_code'])): ?>
+                                    <br><small><i>Sales Code: <?= e($r['sales_code']) ?></i></small>
+                                <?php endif; ?>
+                            </td>
                             <td><?= e($r['jabatan']) ?></td>
                             <td><?= e(dmy($r['join_date'])) ?></td>
                             <td>
                                 <?= e(dmy($due)) ?>
                                 <?php if($daysLeft!==null): ?>
-                                    <span class="<?= $badgeClass ?>" title="Sisa hari"><?= e($daysLeft) ?>h</span>
+                                    <span class="<?= $badgeClass ?>" title="Sisa hari"><?= e((string)$daysLeft) ?>h</span>
                                 <?php endif; ?>
                             </td>
                             <td><span class="badge"><?= e($r['status']) ?></span></td>
@@ -563,21 +690,27 @@ unset($_SESSION['flash_msg']);
                                     <a href="#" class="btn action-btn" onclick="event.preventDefault(); openPerpanjang(<?= (int)$r['id_karyawan'] ?>,'<?= e($r['nama_karyawan']) ?>','<?= e($r['proyek']) ?>');">
                                         <i class="fas fa-calendar-plus"></i> Perpanjang
                                     </a>
-                                    
-                                   
-                                </div>
+                                    <div class="action-dropdown">
+                                        <button class="action-menu-trigger" onclick="toggleMenu(this)">
+                                            <i class="fas fa-ellipsis-v"></i>
+                                        </button>
+                                        <ul class="action-menu">
+                                            <?php if ($show_surat_tugas): ?>
+                                                <li><a href="#" onclick="event.preventDefault(); openSurat(<?= (int)$r['id_karyawan'] ?>,'<?= e($r['nama_karyawan']) ?>','<?= e($r['proyek']) ?>','<?= e($r['jabatan']) ?>');"><i class="fas fa-file-export"></i> Generate ST</a></li>
+                                            <?php endif; ?>
+                                            <li><a href="#" onclick="event.preventDefault(); openUpload(<?= (int)$r['id_karyawan'] ?>,'<?= e($r['nama_karyawan']) ?>','<?= e($r['proyek']) ?>');"><i class="fas fa-upload"></i> Upload ST</a></li>
+                                        </ul>
+                                    </div>
+                                    </div>
                             </td>
                         </tr>
-                    <?php endforeach; endif; ?>
+                        <?php endforeach; endif; ?>
                     </tbody>
                 </table>
             </div>
         </main>
-
-
     </div>
 
-    <!-- Modal Perpanjang Kontrak -->
     <div id="modalPerpanjang" class="modal">
         <div class="card">
             <h3>Perpanjang Kontrak</h3>
@@ -607,7 +740,6 @@ unset($_SESSION['flash_msg']);
         </div>
     </div>
 
-    <!-- Modal Buat Surat Tugas (Generate) -->
     <div id="modalSurat" class="modal">
         <div class="card">
             <h3>Buat Surat Tugas (Generate)</h3>
@@ -665,7 +797,6 @@ unset($_SESSION['flash_msg']);
         </div>
     </div>
 
-    <!-- Modal Upload Surat Tugas -->
     <div id="modalUpload" class="modal">
         <div class="card">
             <h3>Upload Surat Tugas Manual</h3>
@@ -685,7 +816,6 @@ unset($_SESSION['flash_msg']);
                         <label>Tanggal Pembuatan</label>
                         <input type="date" name="tgl_pembuatan" value="<?= e(date('Y-m-d')) ?>" required>
                     </div>
-                    <!-- Hidden inputs for mandatory fields in surat_tugas table -->
                     <input type="hidden" name="posisi" value="">
                     <input type="hidden" name="penempatan" value="">
                     <input type="hidden" name="sales_code" value="">
@@ -706,7 +836,7 @@ unset($_SESSION['flash_msg']);
     </div>
 
     <script>
-
+        // Reposisi dropdown agar tidak keluar layar
         function repositionDropdown() {
             const menus = document.querySelectorAll('.action-menu.active');
             menus.forEach(menu => {
@@ -719,7 +849,7 @@ unset($_SESSION['flash_msg']);
                 menu.style.removeProperty('bottom');
 
                 // kalau bagian bawah dropdown melebihi viewport, pakai dropup
-                if (rect.bottom > viewportHeight) {
+                if (rect.bottom > viewportHeight && rect.top > menu.offsetHeight) { // Pastikan ada ruang di atas
                     menu.classList.add('dropup');
                 }
             });
@@ -736,6 +866,7 @@ unset($_SESSION['flash_msg']);
         // Panggil juga saat pengguna scroll atau resize jendela
         window.addEventListener('scroll', repositionDropdown);
         window.addEventListener('resize', repositionDropdown);
+
         // --- Dropdown Menu Logic ---
         function toggleMenu(trigger) {
             document.querySelectorAll('.action-menu.active').forEach(menu => {
@@ -767,16 +898,16 @@ unset($_SESSION['flash_msg']);
             const now = new Date();
             const yyyy = now.getFullYear();
             const mm = String(now.getMonth() + 1).padStart(2, '0');
-            // Generate nomor surat acak, perlu mekanisme backend yang lebih baik
+            // Generate nomor surat acak, perlu mekanisme backend yang lebih baik jika ini harus unik
             return `ST/${(proyek || 'GEN')}/${yyyy}/${mm}/${pad3(Math.floor(Math.random() * 999) + 1)}`;
         }
 
         // FIX: Fungsi openSurat sekarang mengisi SEMUA input tersembunyi (g_) dengan nilai default
         function openSurat(id, nama, proyek, jabatan) {
             const defaultPosisi = jabatan || '';
-            const defaultPenempatan = '';
-            const defaultSales = '';
-            const defaultAlamat = '';
+            const defaultPenempatan = ''; // Anda bisa mengambil dari data karyawan jika tersedia
+            const defaultSales = ''; // Anda bisa mengambil dari data karyawan jika tersedia
+            const defaultAlamat = ''; // Anda bisa mengambil dari data karyawan jika tersedia
             const defaultTanggal = (new Date()).toISOString().slice(0, 10);
             const noSurat = autoNoSurat(proyek);
 
@@ -821,16 +952,22 @@ unset($_SESSION['flash_msg']);
         // Ini tetap diperlukan jika user MENGUBAH nilai di input (st_...)
         ['st_posisi', 'st_penempatan', 'st_sales', 'st_alamat', 'st_tanggal', 'st_nosurat'].forEach(id => {
             const el = document.getElementById(id);
-            if (!el) return;
+            if (!el) return; // Pastikan elemen ada
             el.addEventListener('input', () => {
                 const map = { st_posisi: 'g_posisi', st_penempatan: 'g_penempatan', st_sales: 'g_sales', st_alamat: 'g_alamat', st_tanggal: 'g_tanggal', st_nosurat: 'g_nosurat' };
-                if (map[id]) document.getElementById(map[id]).value = el.value;
+                if (map[id]) {
+                    const targetEl = document.getElementById(map[id]);
+                    if (targetEl) { // Pastikan elemen target juga ada
+                        targetEl.value = el.value;
+                    }
+                }
             });
         });
 
         // Penutup modal saat klik di luar atau tekan Escape
         ['modalPerpanjang', 'modalSurat', 'modalUpload'].forEach(mid => {
             const m = document.getElementById(mid);
+            if (!m) return; // Pastikan modal ada
             m.addEventListener('click', (e) => {
                 if (e.target === m) {
                     m.style.display = 'none';

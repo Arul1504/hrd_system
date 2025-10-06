@@ -11,6 +11,13 @@ if (!isset($_SESSION['id_karyawan'])) {
 // Sertakan file konfigurasi dan helper
 require '../config.php';
 
+// Fungsi bantuan untuk HTML escaping (jika belum ada di config.php)
+if (!function_exists('e')) {
+    function e($text) {
+        return htmlspecialchars($text, ENT_QUOTES, 'UTF-8');
+    }
+}
+
 // Ambil data user dari sesi untuk digunakan di halaman ini
 $id_karyawan = $_SESSION['id_karyawan'];
 $nama_user = $_SESSION['nama'];
@@ -37,117 +44,124 @@ $jabatan_user = $user_info['jabatan'];
 if ($_SERVER["REQUEST_METHOD"] == "POST") {
     $jenis_pengajuan = $_POST['submission-type'];
     $status_pengajuan = 'Menunggu';
-    $dokumen_pendukung_final = NULL;
 
     if ($jenis_pengajuan === 'Reimburse') {
         // =========================================================
-        // --- LOGIKA UNTUK REIMBURSE MULTIPLE ITEMS ---
+        // --- LOGIKA UNTUK REIMBURSE MULTIPLE ITEMS (FINAL) ---
         // =========================================================
 
-        // 1. Ambil data dasar Reimburse (non-berulang)
         $lokasi = $_POST['lokasi'];
         $kategori_utama = $_POST['kategori-utama'];
         $tanggal_utama = $_POST['tanggal-transaksi-utama'];
-        
-        // Data diambil dari sesi user
         $project_karyawan = $user_info['proyek']; 
         
-        // 2. Ambil data item (array input)
         $deskripsi_arr = isset($_POST['deskripsi']) ? $_POST['deskripsi'] : [];
         $nominal_arr = isset($_POST['nominal']) ? $_POST['nominal'] : [];
         $kwitansi_arr = isset($_FILES['kwitansi_file']) ? $_FILES['kwitansi_file'] : [];
         
         $jumlah_item = count($deskripsi_arr);
-        $total_item_sukses = 0;
+        $total_nominal_semua_item = 0;
+        $detail_items = []; 
         $error_messages = [];
+        $dokumen_kwitansi_list = []; 
+        $item_berhasil_diproses = 0;
 
-        // Validasi Awal Reimburse
         if ($jumlah_item == 0) {
             echo "<script>alert('Minimal harus ada satu item reimbursement yang diisi.');</script>";
             exit();
         }
 
-        // 3. Loop dan Insert SETIAP ITEM sebagai entri terpisah di tabel pengajuan
+        // --- LOOPING UNTUK PROSES UPLOAD DAN KOMPILASI DATA ---
         for ($i = 0; $i < $jumlah_item; $i++) {
             
-            // Periksa apakah item ini terkirim (untuk menghindari error jika array tidak sinkron)
-            if (!isset($deskripsi_arr[$i]) || !isset($nominal_arr[$i])) continue;
-            
-            $current_deskripsi = $deskripsi_arr[$i];
-            $current_nominal = floatval($nominal_arr[$i]); // Pastikan ini float
+            if (!isset($deskripsi_arr[$i]) || !isset($nominal_arr[$i]) || !isset($kwitansi_arr['error'][$i]) || $kwitansi_arr['error'][$i] !== 0) {
+                 continue; // Skip jika input dasar tidak ada atau file error
+            }
 
-            // Periksa apakah item ini kosong/tidak valid
+            $current_deskripsi = $deskripsi_arr[$i];
+            // Bersihkan input nominal dari format ribuan
+            $current_nominal = floatval(preg_replace('/[^\d]/', '', $nominal_arr[$i]));
+            $kwitansi_filename = NULL;
+
             if (empty(trim($current_deskripsi)) || $current_nominal <= 0) {
-                // Lewati item yang kosong/tidak valid
+                $error_messages[] = "Item ke-" . ($i+1) . " (Deskripsi: " . $current_deskripsi . ") tidak valid.";
                 continue;
             }
 
-            // A. Siapkan data pengajuan untuk item saat ini
-            $keterangan_final = "REIMBURSE (" . $kategori_utama . "): Nominal Rp. " . number_format($current_nominal, 0, ',', '.') . " | Lokasi: " . $lokasi . " | Project: " . $project_karyawan . " | Deskripsi: " . $current_deskripsi;
-            $tanggal_mulai_final = $tanggal_utama;
-            $tanggal_berakhir_final = $tanggal_utama;
-            
-            $nama_pengganti = NULL;
-            $nik_pengganti = NULL;
-            $wa_pengganti = NULL;
-            $dokumen_pendukung_final = NULL;
+            // A. Proses unggah file Kwitansi
+            $upload_dir = '../../uploads/';
+            if (!is_dir($upload_dir)) {
+                mkdir($upload_dir, 0755, true);
+            }
 
-            // B. Proses unggah file Kwitansi untuk item saat ini
-            if ($kwitansi_arr['error'][$i] == 0) {
-                $upload_dir = '../../uploads/';
-                
-                if (!is_dir($upload_dir)) {
-                    mkdir($upload_dir, 0755, true);
-                }
+            $file_name = uniqid() . '-' . basename($kwitansi_arr['name'][$i]);
+            $file_path = $upload_dir . $file_name;
+            $allowed_types = ['pdf', 'jpg', 'jpeg', 'png']; 
+            $file_type = pathinfo($file_path, PATHINFO_EXTENSION);
 
-                $file_name = uniqid() . '-' . basename($kwitansi_arr['name'][$i]);
-                $file_path = $upload_dir . $file_name;
-                $allowed_types = ['pdf', 'jpg', 'jpeg', 'png']; 
-                $file_type = pathinfo($file_path, PATHINFO_EXTENSION);
-
-
-                if (in_array(strtolower($file_type), $allowed_types)) {
-                    if (move_uploaded_file($kwitansi_arr['tmp_name'][$i], $file_path)) {
-                        $dokumen_pendukung_final = $file_name;
-                    } else {
-                        $error_messages[] = "Gagal mengunggah kwitansi item ke-" . ($i+1) . ".";
-                        continue; 
-                    }
+            if (in_array(strtolower($file_type), $allowed_types)) {
+                if (move_uploaded_file($kwitansi_arr['tmp_name'][$i], $file_path)) {
+                    $kwitansi_filename = $file_name;
                 } else {
-                    $error_messages[] = "Tipe file kwitansi item ke-" . ($i+1) . " tidak diizinkan.";
+                    $error_messages[] = "Gagal mengunggah kwitansi item ke-" . ($i+1) . ".";
                     continue; 
                 }
             } else {
-                $error_messages[] = "Kwitansi wajib diunggah untuk item ke-" . ($i+1) . ".";
+                $error_messages[] = "Tipe file kwitansi item ke-" . ($i+1) . " tidak diizinkan.";
                 continue; 
             }
-
-            // C. Insert item ke database
-            $sql = "INSERT INTO pengajuan (id_karyawan, nik_karyawan, jenis_pengajuan, tanggal_mulai, tanggal_berakhir, keterangan, dokumen_pendukung, nama_pengganti, nik_pengganti, wa_pengganti, status_pengajuan, tanggal_diajukan) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())";
             
-            $stmt = $conn->prepare($sql);
+            // B. Kumpulkan detail item dan hitung total
+            $total_nominal_semua_item += $current_nominal;
+            $dokumen_kwitansi_list[] = $kwitansi_filename;
             
-            $stmt->bind_param("issssssssss", $id_karyawan, $nik_user, $jenis_pengajuan, $tanggal_mulai_final, $tanggal_berakhir_final, $keterangan_final, $dokumen_pendukung_final, $nama_pengganti, $nik_pengganti, $wa_pengganti, $status_pengajuan);
-            
-            if ($stmt->execute()) {
-                $total_item_sukses++;
-            } else {
-                $error_messages[] = "Error DB saat insert item ke-" . ($i+1) . ": " . $stmt->error;
-            }
-            if(isset($stmt)) $stmt->close(); // Tutup statement setelah insert
+            // Format: Deskripsi Item | Nominal | Nama File Kwitansi
+            // Menggunakan delimiter |~| untuk memisahkan antar item.
+            $detail_items[] = trim($current_deskripsi) . " | Nominal: Rp " . number_format($current_nominal, 0, ',', '.') . " | Kwitansi: " . $kwitansi_filename;
+            $item_berhasil_diproses++;
         } 
+
+        // Validasi Akhir
+        if ($item_berhasil_diproses <= 0) {
+            $alert_message = "Gagal mengirim pengajuan. Tidak ada item yang valid atau semua item gagal diunggah.";
+            echo "<script>alert('" . $alert_message . "');</script>";
+            exit();
+        }
+
+        // 3. Gabungkan semua data menjadi satu entri pengajuan
         
-        // 4. Beri feedback ke user
-        if ($total_item_sukses > 0) {
-            $alert_message = $total_item_sukses . " item Reimbursement berhasil dikirim!";
+        // Simpan detail LENGKAP ke kolom 'keterangan'
+        $all_items_details_string = implode(" |~| ", $detail_items);
+        $keterangan_final = $all_items_details_string;
+
+        // Simpan daftar semua nama file kwitansi (dipisahkan koma)
+        $dokumen_pendukung_final = implode(",", $dokumen_kwitansi_list);
+
+        // Data Lain
+        $tanggal_mulai_final = $tanggal_utama; 
+        $tanggal_berakhir_final = $tanggal_utama; 
+        $nama_pengganti = NULL;
+        $nik_pengganti = NULL;
+        $wa_pengganti = NULL;
+        
+        // 4. Insert HANYA SATU entri ke tabel pengajuan
+        $sql = "INSERT INTO pengajuan (id_karyawan, nik_karyawan, jenis_pengajuan, tanggal_mulai, tanggal_berakhir, keterangan, dokumen_pendukung, nama_pengganti, nik_pengganti, wa_pengganti, status_pengajuan, tanggal_diajukan) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())";
+        
+        $stmt = $conn->prepare($sql);
+        
+        $stmt->bind_param("issssssssss", $id_karyawan, $nik_user, $jenis_pengajuan, $tanggal_mulai_final, $tanggal_berakhir_final, $keterangan_final, $dokumen_pendukung_final, $nama_pengganti, $nik_pengganti, $wa_pengganti, $status_pengajuan);
+        
+        if ($stmt->execute()) {
+            $alert_message = "Pengajuan Reimbursement berhasil dikirim dengan " . $item_berhasil_diproses . " item (Total Rp. " . number_format($total_nominal_semua_item, 0, ',', '.') . ").";
             if (!empty($error_messages)) {
-                 $alert_message .= " Namun, ada masalah dengan beberapa item lainnya.";
+                $alert_message .= " (Terdapat " . count($error_messages) . " item gagal diproses/diunggah).";
             }
             echo "<script>alert('" . $alert_message . "'); window.location.href='pengajuan.php';</script>";
         } else {
-            $alert_message = "Gagal mengirim pengajuan reimburse. Semua item tidak valid atau ada error: " . implode(', ', $error_messages);
+            $alert_message = "Gagal mengirim pengajuan reimburse: " . $stmt->error;
             echo "<script>alert('" . $alert_message . "');</script>";
         }
+        if(isset($stmt)) $stmt->close(); 
 
     } else {
         // =========================================================
@@ -210,8 +224,6 @@ $stmt_history = $conn->prepare($sql_history);
 $stmt_history->bind_param("i", $id_karyawan);
 $stmt_history->execute();
 $result_history = $stmt_history->get_result();
-
-// Fungsi untuk HTML escaping
 
 ?>
 <!DOCTYPE html>
@@ -289,6 +301,7 @@ $result_history = $stmt_history->get_result();
 
         .form-group select,
         .form-group input[type="text"],
+        .form-group input[type="number"], /* Pastikan type number ter-style */
         .form-group input[type="date"],
         .form-group textarea {
             width: 100%;
@@ -304,6 +317,7 @@ $result_history = $stmt_history->get_result();
 
         .form-group select:focus,
         .form-group input[type="text"]:focus,
+        .form-group input[type="number"]:focus,
         .form-group input[type="date"]:focus,
         .form-group textarea:focus {
             outline: none;
@@ -430,6 +444,10 @@ $result_history = $stmt_history->get_result();
         .history-empty p {
             margin: 0;
         }
+        
+        .reimburse-item-row .form-group label {
+            font-weight: 400; /* label item lebih tipis */
+        }
     </style>
 </head>
 
@@ -502,7 +520,7 @@ $result_history = $stmt_history->get_result();
                                 <label for="surat-file">Unggah Dokumen Pendukung (PDF)</label>
                                 <input type="file" id="surat-file" name="surat-file" accept=".pdf" required>
                                 <small style="color: #777; font-size: 0.8rem; margin-top: 5px;">*Pastikan dokumen
-                                    berformat PDF dan tidak lebih dari 2MB.</small>
+                                    berformat PDF.</small>
                             </div>
 
                             <div class="form-group">
@@ -533,7 +551,7 @@ $result_history = $stmt_history->get_result();
                                 <div class="form-group">
                                     <label for="project-reimburse">Project</label>
                                     <input type="text" id="project-reimburse" name="project-reimburse"
-                                        value="<?= e($project) ?>"  readonly required>
+                                        value="<?= e($project) ?>" readonly required>
                                 </div>
                             </div>
 
@@ -557,10 +575,10 @@ $result_history = $stmt_history->get_result();
                                 <div class="form-group">
                                     <label for="email-reimburse">Email</label>
                                     <input type="text" id="email-reimburse" name="email-reimburse"
-                                        value="<?= e($email) ?>"  readonly required>
+                                        value="<?= e($email) ?>" readonly required>
                                 </div>
                                 <div class="form-group">
-                                    <label for="tanggal-transaksi-utama">Tanggal Utama</label>
+                                    <label for="tanggal-transaksi-utama">Tanggal Transaksi</label>
                                     <input type="date" id="tanggal-transaksi-utama" name="tanggal-transaksi-utama"
                                         required>
                                 </div>
@@ -570,14 +588,14 @@ $result_history = $stmt_history->get_result();
 
                             <h3>Rincian Pengeluaran</h3>
                             <div id="item-list">
-                            </div>
+                                </div>
 
                             <button type="button" onclick="addReimbursementRow(event)" class="btn-submit"
                                 style="background-color: #007bff; max-width: 150px; margin-left: 0;">
                                 <i class="fas fa-plus"></i> Tambah Item
                             </button>
                             <small style="color: #777; font-size: 0.8rem; margin-top: 5px;">*Semua rincian pengeluaran
-                                di atas akan dikirim.</small>
+                                di atas akan dikirim sebagai satu pengajuan.</small>
 
                         </div>
 
@@ -595,10 +613,41 @@ $result_history = $stmt_history->get_result();
                         <?php
                         if ($result_history->num_rows > 0) {
                             while ($row = $result_history->fetch_assoc()) {
+                                
+                                // --- LOGIKA RINGKASAN BARU UNTUK REIMBURSE ---
+                                $keterangan_tampil = "";
                                 $pengganti_display = "";
-                                if (!empty($row['nama_pengganti'])) {
-                                    $pengganti_display = " | Pengganti: " . e($row['nama_pengganti']);
+                                
+                                if ($row['jenis_pengajuan'] === 'Reimburse') {
+                                    
+                                    // Menghitung jumlah item
+                                    $item_count = substr_count($row['keterangan'], '|~|') + 1;
+                                    
+                                    // Menghitung jumlah kwitansi
+                                    $file_count = substr_count($row['dokumen_pendukung'], ',');
+                                    if (!empty($row['dokumen_pendukung'])) {
+                                        $file_count += 1;
+                                    } else {
+                                        $file_count = 0;
+                                    }
+
+                                    $keterangan_tampil = "Reimburse: " . $item_count . " Item | " . $file_count . " Kwitansi Terlampir. (Detail di sistem Admin)";
+                                    
+                                } else {
+                                    // Cuti/Izin/Sakit
+                                    if (!empty($row['nama_pengganti'])) {
+                                        $pengganti_display = " | Pengganti: " . e($row['nama_pengganti']);
+                                    }
+                                    
+                                    // Ambil 100 karakter pertama dari keterangan
+                                    $keterangan_singkat_cuti = e($row['keterangan']);
+                                    if (strlen($keterangan_singkat_cuti) > 100) {
+                                        $keterangan_singkat_cuti = substr($keterangan_singkat_cuti, 0, 97) . '...';
+                                    }
+
+                                    $keterangan_tampil = "Keterangan: " . $keterangan_singkat_cuti . $pengganti_display;
                                 }
+                                // --- AKHIR LOGIKA RINGKASAN BARU ---
 
                                 // Menentukan kelas status
                                 $status_class = strtolower($row['status_pengajuan']);
@@ -622,7 +671,7 @@ $result_history = $stmt_history->get_result();
                                     <div class="history-details">
                                         <p class="submission-type">' . e($row['jenis_pengajuan']) . '</p>
                                         <p class="submission-date"><i class="fas fa-calendar-alt"></i> ' . date('d M Y', strtotime($row['tanggal_mulai'])) . ' - ' . date('d M Y', strtotime($row['tanggal_berakhir'])) . '</p>
-                                        <p class="submission-note">Keterangan: ' . e($row['keterangan']) . $pengganti_display . '</p>
+                                        <p class="submission-note">' . $keterangan_tampil . '</p>
                                     </div>
                                     <div class="history-status ' . $status_style . '">' . e($row['status_pengajuan']) . '</div>
                                 </li>';
@@ -636,27 +685,27 @@ $result_history = $stmt_history->get_result();
             </div>
         </main>
     </div>
-   <script>
+    <script>
     // Template HTML untuk baris item Reimburse yang akan diduplikasi
     const ITEM_TEMPLATE = `
         <div class="reimburse-item-row" style="border-top: 1px dashed #eee; padding-top: 15px; margin-top: 15px;">
             <button type="button" onclick="removeReimbursementRow(event)" 
-                style="float: right; color: #e74c3c; background: none; border: none; cursor: pointer; font-size: 1.2rem;">
-                <i class="fas fa-times-circle"></i> Hapus
+                style="float: right; color: #e74c3c; background: none; border: none; cursor: pointer; font-size: 0.9rem;">
+                <i class="fas fa-times-circle"></i> Hapus Item
             </button>
-            <div class="reimburse-grid" style="grid-template-columns: 2fr 1fr 1fr;">
-                <div class="form-group">
-                    <label>Description</label>
+            <div class="reimburse-grid" style="grid-template-columns: 2fr 1fr 1fr; align-items: flex-end;">
+                <div class="form-group" style="margin-bottom: 0;">
+                    <label>Deskripsi Pengeluaran</label>
                     <textarea name="deskripsi[]" placeholder="Jelaskan rincian pengeluaran..." required style="min-height: 45px;"></textarea>
                 </div>
-                <div class="form-group">
+                <div class="form-group" style="margin-bottom: 0;">
                     <label>Nominal (Rp)</label>
-                    <input type="number" name="nominal[]" min="1" placeholder="Rp. 0" required>
+                    <input type="number" name="nominal[]" min="1" placeholder="0" required>
                 </div>
-                <div class="form-group">
+                <div class="form-group" style="margin-bottom: 0;">
                     <label>Kwitansi</label>
                     <input type="file" name="kwitansi_file[]" accept=".pdf, .jpg, .jpeg, .png" required> 
-                    <small class="file-note" style="color: #777; font-size: 0.8rem; margin-top: 5px;">*Format PDF/JPG/PNG.</small>
+                    <small class="file-note" style="color: #777; font-size: 0.8rem; margin-top: 5px;">*PDF/JPG/PNG.</small>
                 </div>
             </div>
         </div>
@@ -673,7 +722,7 @@ $result_history = $stmt_history->get_result();
         const standardFile = document.getElementById('surat-file');
 
         // Elemen-elemen yang perlu diatur `required` di form reimburse (base fields)
-        const baseReimburseInputs = reimburseFields.querySelectorAll('.reimburse-grid input:not([type="file"]), .reimburse-grid select, .reimburse-grid textarea');
+        const baseReimburseInputs = reimburseFields.querySelectorAll('.reimburse-grid input:not([type="file"]), .reimburse-grid select');
 
 
         function setRequired(elements, isRequired) {

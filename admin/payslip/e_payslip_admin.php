@@ -33,6 +33,7 @@ if ($q_proyek) {
 $sql = "SELECT id_karyawan, nik_ktp, nama_karyawan, jabatan, proyek
       FROM karyawan
       WHERE (status IS NULL OR status='' OR UPPER(status) <> 'TIDAK AKTIF')
+      AND TRIM(COALESCE(sales_code, '')) <> '' 
 ";
 
 $params = [];
@@ -444,14 +445,12 @@ $conn->close();
                                 <li><a href="../data_karyawan/karyawan_nonaktif.php">Non-Aktif</a></li>
                             </ul>
                         </li>
-                        <li class="dropdown-trigger">
-                            <a href="#" class="dropdown-link"><i class="fas fa-file-alt"></i> Data Pengajuan<span
-                                    class="badge"><?= $total_pending ?? 0 ?></span> <i
-                                    class="fas fa-caret-down"></i></a>
+                      <li class="dropdown-trigger">
+                            <a href="#" class="dropdown-link"><i class="fas fa-users"></i> Data Pengajuan <i class="fas fa-caret-down"><span class="badge"><?= $total_pending ?></span></i></a>
                             <ul class="dropdown-menu">
                                 <li><a href="../pengajuan/pengajuan.php">Pengajuan</a></li>
-                                <li><a href="../pengajuan/kelola_pengajuan.php">Kelola Pengajuan<span
-                                            class="badge"><?= $total_pending ?? 0 ?></span></a></li>
+                                <li><a href="../pengajuan/kelola_pengajuan.php">Kelola Pengajuan<span class="badge"><?= $total_pending ?></span></a></li>
+                                <li><a href="../pengajuan/kelola_reimburse.php">Kelola Reimburse<span class="badge"><?= $total_pending ?></span></a></li>
                             </ul>
                         </li>
                         <li><a href="../monitoring_kontrak/monitoring_kontrak.php"><i class="fas fa-calendar-alt"></i>

@@ -14,8 +14,27 @@ use PhpOffice\PhpSpreadsheet\Style\Alignment;
 use PhpOffice\PhpSpreadsheet\Style\Fill;
 use PhpOffice\PhpSpreadsheet\Style\Border;
 
-// Daftar field per proyek
+// --- DAFTAR LENGKAP SEMUA FIELDS DARI TABEL KARYAWAN ---
+// Definisi ini HARUS sesuai dengan semua kolom yang ada di tabel 'karyawan' Anda.
+const ALL_FIELDS = [
+    "id_karyawan", "nama_karyawan", "jabatan", "jenis_kelamin", "tempat_lahir", "tanggal_lahir", 
+    "alamat", "alamat_tinggal", "rt_rw", "kelurahan", "kecamatan", "kota_kabupaten", "nik_ktp", 
+    "pendidikan_terakhir", "no_hp", "alamat_email", "no_kk", "nama_ayah", "nama_ibu", 
+    "nik_karyawan", "nip", "penempatan", "nama_user", "kota", "area", "nomor_kontrak", 
+    "tanggal_pembuatan_pks", "nomor_surat_tugas", "masa_penugasan", "tgl_aktif_masuk", 
+    "join_date", "end_date", "end_date_pks", "end_of_contract", "status_karyawan", "status", 
+    "tgl_resign", "cabang", "job", "channel", "tgl_rmu", "nomor_rekening", "nama_bank", 
+    "gapok", "umk_ump", "tanggal_pernyataan", "npwp", "status_pajak", "recruitment_officer", 
+    "team_leader", "recruiter", "tl", "manager", "nama_sm", "nama_sh", "sales_code", 
+    "nomor_reff", "no_bpjamsostek", "no_bpjs_kes", "role", "proyek", "surat_tugas", 
+    "sub_project_cnaf", "no", "tanggal_pembuatan", "spr_bro", "nama_bm_sm", "nama_tl", 
+    "level", "tanggal_pkm", "nama_sm_cm", "sbi", "tanggal_sign_kontrak", "nama_oh", 
+    "jabatan_sebelumnya", "nama_bm", "allowance", "tunjangan_kesehatan", "om", "nama_cm"
+];
+
+// Daftar field per proyek (untuk mode filter)
 const PROJECT_FIELDS = [
+    // Jika Anda ingin semua proyek menampilkan SEMUA fields, ganti isinya dengan ALL_FIELDS
     "CIMB" => [
         "nama_karyawan","cabang","nomor_kontrak","tanggal_pembuatan_pks","tempat_lahir","tanggal_lahir","alamat","rt_rw","kelurahan","kecamatan","kota_kabupaten","nik_ktp","pendidikan_terakhir","no_hp","jabatan","alamat_email",
         "nama_sm","nama_sh","job","channel","tgl_rmu",
@@ -49,8 +68,8 @@ function ucLabel(string $raw): string {
     $t = str_replace('_', ' ', strtolower($raw));
     $t = ucwords($t);
     return str_replace(
-        ['Nik', 'Bpjs', 'Bpjamsostek', 'Umk', 'Ump', 'Pks', 'Id', 'Npwp', 'Nip'],
-        ['NIK', 'BPJS', 'BPJamsostek', 'UMK', 'UMP', 'PKS', 'ID', 'NPWP', 'NIP'],
+        ['Nik', 'Bpjs', 'Bpjamsostek', 'Umk', 'Ump', 'Pks', 'Id', 'Npwp', 'Nip', 'Rmu', 'Tl', 'Cm', 'Sm', 'Sh', 'Oh', 'Sbi', 'Pkm'],
+        ['NIK', 'BPJS', 'BPJamsostek', 'UMK', 'UMP', 'PKS', 'ID', 'NPWP', 'NIP', 'RMU', 'TL', 'CM', 'SM', 'SH', 'OH', 'SBI', 'PKM'],
         $t
     );
 }
@@ -59,18 +78,17 @@ function ucLabel(string $raw): string {
 $proyek = strtoupper($_GET['proyek'] ?? '');
 
 // Tentukan kolom yang diexport
-$columns_to_fetch = ['id_karyawan', 'proyek']; 
+$columns_to_fetch = [];
 if (!empty($proyek) && isset(PROJECT_FIELDS[$proyek])) {
-    $columns_to_fetch = array_merge($columns_to_fetch, PROJECT_FIELDS[$proyek]);
+    // Mode Filter Proyek: Gunakan field spesifik proyek
+    $columns_to_fetch = array_merge(['id_karyawan', 'proyek'], PROJECT_FIELDS[$proyek]);
 } else {
-    $columns_to_fetch = [
-        "id_karyawan", "proyek", "nik_karyawan", "nik_ktp", "nama_karyawan", "jabatan",
-        "jenis_kelamin", "tempat_lahir", "tanggal_lahir", "alamat", "no_hp", "join_date", "status"
-    ];
+    // Mode TANPA Filter (ATAU filter tidak valid): Gunakan SEMUA fields
+    $columns_to_fetch = ALL_FIELDS;
 }
 $columns_to_fetch = array_unique($columns_to_fetch);
 
-// Siapkan SQL
+// Hapus id_karyawan dan proyek dari header Excel, tapi tetap di SQL
 $sql_select = implode(', ', array_map(function($col) { return "`" . $col . "`"; }, $columns_to_fetch));
 $excel_headers = array_map('ucLabel', array_diff($columns_to_fetch, ['id_karyawan', 'proyek']));
 
@@ -119,7 +137,7 @@ foreach ($excel_headers as $h) {
     $sheet->getStyle($cell)->getFont()->setBold(true);
     $sheet->getStyle($cell)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
     $sheet->getStyle($cell)->getFill()->setFillType(Fill::FILL_SOLID)
-          ->getStartColor()->setRGB('D9E1F2');
+             ->getStartColor()->setRGB('D9E1F2');
     $colIndex++;
 }
 
@@ -128,9 +146,13 @@ $row = 5;
 if ($result && $result->num_rows > 0) {
     while ($r = $result->fetch_assoc()) {
         $colIndex = 1;
+        // Kita gunakan $columns_to_fetch sebagai daftar kolom dari DB
         foreach ($columns_to_fetch as $db_col) {
+            // Kita lewati kolom 'id_karyawan' dan 'proyek' dari output Excel
             if ($db_col === 'id_karyawan' || $db_col === 'proyek') continue;
+            
             $value = $r[$db_col] ?? '';
+            // Logika format tanggal
             if (preg_match('/tanggal|date|tgl/i', $db_col)) {
                 if (!empty($value) && $value != '0000-00-00') {
                     $value = date('d-m-Y', strtotime($value));

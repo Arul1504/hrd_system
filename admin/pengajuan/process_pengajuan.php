@@ -1,17 +1,31 @@
 <?php
 
+
 require '../config.php';
 
+// Fungsi bantuan untuk HTML escaping (jika belum ada di config.php)
+if (!function_exists('e')) {
+    function e($text)
+    {
+        return htmlspecialchars($text, ENT_QUOTES, 'UTF-8');
+    }
+}
+
 // Periksa hak akses ADMIN
-// Mengubah 'HRD' menjadi 'ADMIN'
 if (!isset($_SESSION['id_karyawan']) || $_SESSION['role'] !== 'ADMIN') {
     header("Location: ../../index.php");
     exit();
 }
 
-if (isset($_GET['action']) && isset($_GET['id'])) {
+// Ambil data admin dari sesi
+$nama_admin = $_SESSION['nama'] ?? 'ADMIN_SYSTEM';
+
+if (isset($_GET['action']) && isset($_GET['id']) && isset($_GET['notes'])) {
     $action = $_GET['action'];
-    $id_pengajuan = $_GET['id'];
+    $id_pengajuan = (int)$_GET['id'];
+    // Notes sudah di-URL encode di frontend, kita gunakan di sini
+    $notes = $_GET['notes']; 
+    
     $new_status = '';
 
     if ($action === 'approve') {
@@ -19,27 +33,72 @@ if (isset($_GET['action']) && isset($_GET['id'])) {
     } elseif ($action === 'reject') {
         $new_status = 'Ditolak';
     } else {
-        header("Location: kelola_pengajuan.php");
+        header("Location: kelola_reimburse.php");
         exit();
     }
 
-    // Update status pengajuan di database
-    // Kode ini tidak perlu diubah karena logikanya sudah generik
-    $sql_update = "UPDATE pengajuan SET status_pengajuan = ? WHERE id_pengajuan = ?";
+    // --- 1. UPDATE status final di tabel pengajuan ---
+    // Mencatat status, approved_by, dan tanggal persetujuan/penolakan terakhir
+    $sql_update = "UPDATE pengajuan SET 
+                    status_pengajuan = ?, 
+                    approved_by = ?, 
+                    tanggal_persetujuan = NOW() 
+                   WHERE id_pengajuan = ?";
+    
     $stmt_update = $conn->prepare($sql_update);
-    $stmt_update->bind_param("si", $new_status, $id_pengajuan);
+    // Menggunakan 'ssi' (string, string, integer)
+    $stmt_update->bind_param("ssi", $new_status, $nama_admin, $id_pengajuan);
 
-    if ($stmt_update->execute()) {
-        header("Location: kelola_pengajuan.php?status=" . ($action === 'approve' ? 'approved' : 'rejected'));
+    // --- 2. INSERT log ke tabel pengajuan_log ---
+    // Log status mencakup nama admin untuk riwayat multi-approval
+    $log_status = ($action === 'approve') ? "Approved by " . $nama_admin : "Rejected by " . $nama_admin;
+    
+    // ASUMSI: Tabel pengajuan_log ada (seperti instruksi sebelumnya)
+    $sql_log = "INSERT INTO pengajuan_log (id_pengajuan, status, notes, tanggal) 
+                VALUES (?, ?, ?, NOW())";
+
+    $stmt_log = $conn->prepare($sql_log);
+    // Menggunakan 'iss' (integer, string, string)
+    $stmt_log->bind_param("iss", $id_pengajuan, $log_status, $notes);
+    
+    $success = true;
+    
+    $conn->begin_transaction(); // Mulai transaksi untuk memastikan kedua query berhasil
+    
+    try {
+        if (!$stmt_update->execute()) {
+            throw new Exception("Error updating pengajuan: " . $stmt_update->error);
+        }
+        
+        if (!$stmt_log->execute()) {
+            throw new Exception("Error inserting log: " . $stmt_log->error);
+        }
+        
+        $conn->commit(); // Commit jika kedua query berhasil
+        
+    } catch (Exception $e) {
+        $conn->rollback(); // Rollback jika ada error
+        die("Error pemrosesan: " . $e->getMessage());
+        $success = false;
+    }
+
+    // Redirect kembali ke halaman kelola reimburse
+    if ($success) {
+        header("Location: kelola_reimburse.php?status=" . ($action === 'approve' ? 'approved' : 'rejected'));
         exit();
     } else {
-        die("Error: " . $stmt_update->error);
+        // Jika gagal, redirect ke halaman error atau kembali ke kelola_reimburse
+        header("Location: kelola_reimburse.php?status=error_processing");
+        exit();
     }
-
+    
+    // Tutup statement
     $stmt_update->close();
+    $stmt_log->close();
     $conn->close();
+
 } else {
-    header("Location: kelola_pengajuan.php");
+    header("Location: kelola_reimburse.php");
     exit();
 }
 ?>

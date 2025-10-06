@@ -147,9 +147,15 @@ $sql = "
         AND a.tanggal = ?
     WHERE k.proyek = 'INTERNAL'
 ";
-$sql_pending_requests = "SELECT COUNT(*) AS total_pending FROM pengajuan WHERE status_pengajuan = 'Menunggu'";
+// Ambil data untuk badge di sidebar, KECUALI Reimburse
+$sql_pending_requests = "SELECT COUNT(*) AS total_pending FROM pengajuan WHERE status_pengajuan = 'Menunggu' AND jenis_pengajuan != 'Reimburse'";
 $result_pending_requests = $conn->query($sql_pending_requests);
 $total_pending = $result_pending_requests->fetch_assoc()['total_pending'] ?? 0;
+
+// Query BARU untuk MENGHITUNG HANYA Reimburse yang Menunggu
+$sql_pending_reimburse = "SELECT COUNT(*) AS total_pending FROM pengajuan WHERE jenis_pengajuan = 'Reimburse' AND status_pengajuan = 'Menunggu'";
+$result_pending_reimburse = $conn->query($sql_pending_reimburse);
+$total_pending_reimburse = $result_pending_reimburse->fetch_assoc()['total_pending'] ?? 0;
 $params = [$filter_tanggal];
 $types = "s";
 
@@ -454,13 +460,12 @@ $conn->close();
                                 <li><a href="../data_karyawan/karyawan_nonaktif.php">Non-Aktif</a></li>
                             </ul>
                         </li>
-                        <li class="dropdown-trigger">
-                            <a href="#" class="dropdown-link"><i class="fas fa-users"></i> Data Pengajuan<span
-                                    class="badge"><?= $total_pending ?></span> <i class="fas fa-caret-down"></i></a>
+                       <li class="dropdown-trigger">
+                            <a href="#" class="dropdown-link"><i class="fas fa-users"></i> Data Pengajuan <i class="fas fa-caret-down"><span class="badge"><?= $total_pending ?></span></i></a>
                             <ul class="dropdown-menu">
                                 <li><a href="../pengajuan/pengajuan.php">Pengajuan</a></li>
-                                <li><a href="../pengajuan/kelola_pengajuan.php">Kelola Pengajuan<span
-                                            class="badge"><?= $total_pending ?></span></a></li>
+                                <li><a href="../pengajuan/kelola_pengajuan.php">Kelola Pengajuan<span class="badge"><?= $total_pending ?></span></a></li>
+                                <li><a href="../pengajuan/kelola_reimburse.php">Kelola Reimburse<span class="badge"><?= $total_pending ?></span></a></li>
                             </ul>
                         </li>
                         <li><a href="../monitoring_kontrak/monitoring_kontrak.php"><i class="fas fa-calendar-alt"></i>
