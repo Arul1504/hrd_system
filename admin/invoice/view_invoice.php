@@ -1,28 +1,27 @@
 <?php
 // ===========================
-// view_invoice.php  (sidebar: sama dengan invoice.php, isi: seperti PDF awal)
+// view_invoice.php (Dinamis + Tema MITRA/PKWT + Show-if-present)
 // ===========================
 require_once __DIR__ . '/../config.php';
 if (session_status() === PHP_SESSION_NONE) { session_start(); }
 
-function invoice_logo_data_uri(): string {
-    // Sesuaikan lokasi file logo di server
-    $path = realpath(__DIR__ . '/../image/manu.png');
-    if (!$path || !is_readable($path)) return ''; // fallback: kosong
-    $data = base64_encode(file_get_contents($path));
-    // Jika logomu JPEG, ganti image/png jadi image/jpeg
-    return 'data:image/png;base64,' . $data;
+// helper XSS
+if (!function_exists('e')) {
+  function e($s){ return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); }
 }
 
+// logo inline (aman saat dibuka tanpa akses file publik)
+function invoice_logo_data_uri(): string {
+  $path = realpath(__DIR__ . '/../image/manu.png');
+  if (!$path || !is_readable($path)) return '';
+  $data = base64_encode(file_get_contents($path));
+  return 'data:image/png;base64,' . $data;
+}
 $LOGO_SRC = invoice_logo_data_uri();
-
-
-// helper XSS
-if (!function_exists('e')) { function e($s){ return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); } }
 
 // akses admin
 if (!isset($_SESSION['id_karyawan']) || (($_SESSION['role'] ?? '') !== 'ADMIN')) {
-    header('Location: ../../index.php'); exit;
+  header('Location: ../../index.php'); exit;
 }
 
 // ambil invoice
@@ -37,16 +36,26 @@ $stmt->close();
 if (!$invoice) exit('Invoice tidak ditemukan');
 
 // ambil items
-$stmt = $conn->prepare("SELECT * FROM invoice_items WHERE id_invoice = ? ORDER BY id_item ASC");
+$stmt = $conn->prepare("SELECT * FROM invoice_items WHERE id_invoice = ? ORDER BY item_number ASC, id_item ASC");
 $stmt->bind_param("i", $id_invoice);
 $stmt->execute();
 $items = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
 $stmt->close();
 
-// data sidebar (SAMAA persis dengan invoice.php)
+// ambil penyesuaian (%) jika ada
+$adjustments = [];
+if ($conn && $stmt = $conn->prepare("SELECT label, percent, amount FROM invoice_adjustments WHERE id_invoice = ? ORDER BY id ASC")) {
+  $stmt->bind_param("i", $id_invoice);
+  $stmt->execute();
+  $adjRes = $stmt->get_result();
+  while ($r = $adjRes->fetch_assoc()) { $adjustments[] = $r; }
+  $stmt->close();
+}
+
+// data sidebar
 $id_karyawan_admin = $_SESSION['id_karyawan'];
-$nama_user_admin   = $_SESSION['nama'];
-$role_user_admin   = $_SESSION['role'];
+$nama_user_admin   = $_SESSION['nama'] ?? '';
+$role_user_admin   = $_SESSION['role'] ?? '';
 
 $sql_pending_requests   = "SELECT COUNT(*) AS total_pending FROM pengajuan WHERE status_pengajuan = 'Menunggu'";
 $result_pending_requests = $conn->query($sql_pending_requests);
@@ -61,6 +70,42 @@ $nik_user_admin     = $admin_info['nik_ktp'] ?? 'Tidak Ditemukan';
 $jabatan_user_admin = $admin_info['jabatan'] ?? 'Tidak Ditemukan';
 
 function rupiah($n){ return 'Rp ' . number_format((float)$n, 0, ',', '.'); }
+
+// ====== FLAG tampil/hidden dinamis ======
+// Lebih tangguh: coba beberapa kolom untuk status
+$employeeStatus =
+    ($invoice['employee_status'] ?? '') ?:
+    ($invoice['surat_tipe'] ?? '') ?:
+    ($invoice['status_karyawan'] ?? '');
+$employeeStatus = strtoupper(trim((string)$employeeStatus));
+
+$isMitra = ($employeeStatus === 'MITRA');
+$isPkwt  = ($employeeStatus === 'PKWT');
+
+$hasMgmtFee = ((float)($invoice['mgmt_fee_amount'] ?? 0) > 0) || ((float)($invoice['mgmt_fee_percent'] ?? 0) > 0);
+$hasPPN     = ((float)($invoice['ppn_amount'] ?? 0) > 0);
+$hasPPH     = ((float)($invoice['pph_amount'] ?? 0) > 0);
+
+$hasSubTotal = ((float)($invoice['sub_total'] ?? 0) > 0);
+$hasGrand    = ((float)($invoice['grand_total'] ?? 0) > 0);
+
+$hasTransferBank = !empty($invoice['transfer_bank']);
+$hasTransferNo   = !empty($invoice['transfer_account_no']);
+$hasTransferName = !empty($invoice['transfer_account_name']);
+
+$hasUpName  = !empty($invoice['person_up_name']);
+$hasUpTitle = !empty($invoice['person_up_title']);
+
+$hasBillToBank = !empty($invoice['bill_to_bank']);
+$hasAddr1      = !empty($invoice['bill_to_address1']);
+$hasAddr2      = !empty($invoice['bill_to_address2']);
+$hasAddr3      = !empty($invoice['bill_to_address3']);
+
+$hasAdjustments = !empty($adjustments);
+
+// badge warna
+$themeClass = $isMitra ? 'theme-mitra' : ($isPkwt ? 'theme-pkwt' : '');
+$badgeText  = $isMitra ? 'SURAT MITRA' : ($isPkwt ? 'SURAT PKWT' : '');
 ?>
 <!doctype html>
 <html lang="id">
@@ -68,56 +113,56 @@ function rupiah($n){ return 'Rp ' . number_format((float)$n, 0, ',', '.'); }
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Detail Invoice</title>
-  <!-- stylesheet sama seperti invoice.php -->
   <link rel="stylesheet" href="../style.css">
   <link rel="stylesheet" href="style.css">
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
 
-  <!-- ======== SCOPED STYLE: tampilan isi invoice diset seperti PDF awal ======== -->
   <style>
-    /* jangan sentuh sidebar; fokus di dalam .invoice-canvas saja */
-    .invoice-canvas { max-width: 960px; margin: 0 auto; }
+    /* ====== THEME ====== */
+    .theme-mitra { --theme:#ff6fa3; --theme-ink:#ffffff; --theme-soft:#ffe2ef; }
+    .theme-pkwt  { --theme:#3b82f6; --theme-ink:#ffffff; --theme-soft:#e2efff; }
 
+    .invoice-canvas { max-width: 960px; margin: 0 auto; }
     .paper {
       background:#fff; padding:24px 28px; border-radius:12px;
       box-shadow:0 6px 18px rgba(0,0,0,.08);
     }
 
-    /* header perusahaan: sama seperti PDF (garis merah bawah) */
-    .brand {
-      display:flex; gap:16px; align-items:center;
-      border-bottom: 3px solid #e31837; padding-bottom:8px; margin-bottom:12px;
-    }
+    /* header perusahaan */
+    .brand { display:flex; gap:16px; align-items:center; border-bottom:3px solid #e31837; padding-bottom:8px; margin-bottom:12px; }
     .brand img { height:56px; }
     .brand h1 { margin:0; color:#e31837; font-size:20px; font-weight:700; }
     .brand p { margin:0; font-size:12px; color:#374151; }
     .brand .muted { font-style: italic; }
 
-    .tag-red {
-      display:inline-block; background:#e31837; color:#fff; font-weight:700;
-      padding:6px 10px; border-radius:6px; margin:8px 0 10px;
-    }
+    /* badge status */
+    .badge-theme { display:inline-block; padding:4px 10px; border-radius:999px; font-size:12px; font-weight:700; margin-left:10px; background:var(--theme, #999); color:var(--theme-ink, #fff); }
 
     .head-row { display:flex; justify-content:space-between; gap:24px; }
     .billto p { margin:0 0 4px 0; }
-
     .info table { width:100%; border-collapse:collapse; font-size:13px; }
     .info td { padding:2px 0; }
-    .info .label { width:68px; color:#374151; }
+    .info .label { width:80px; color:#374151; }
 
-    /* tabel item seperti PDF (garis hitam biasa) */
+    /* ====== TAG "BILL TO" & "Please Transfer to Account" – ikut tema ====== */
+    .tag-themed {
+      display:inline-block; background:var(--theme, #e31837); color:var(--theme-ink, #fff);
+      font-weight:700; padding:6px 10px; border-radius:6px; margin:8px 0 10px;
+    }
+
+    /* ====== TABEL ITEM ====== */
     .items { width:100%; border-collapse:collapse; margin-top:8px; font-size:13px; }
     .items th, .items td { border:1px solid #111; padding:8px; background:#fff; }
-    .items thead th { background:#f3f4f6; font-weight:700; }
+    .items thead th { background:var(--theme-soft, #f3f4f6); font-weight:700; }
+
     .tr { text-align:right; }
 
-    /* ringkasan di kanan */
-    .summary { width: 40%; margin-left:auto; border-collapse:collapse; font-size:13px; margin-top:8px; }
+    /* ====== SUMMARY (Grand Total themed) ====== */
+    .summary { width: 50%; margin-left:auto; border-collapse:collapse; font-size:13px; margin-top:12px; }
     .summary td { border:1px solid #111; padding:8px; background:#fff; }
-    .summary tr:last-child td { background:#f3f4f6; font-weight:700; }
+    .summary tr.grand-themed td { background:var(--theme-soft, #f3f4f6); font-weight:800; }
 
-    .transfer .tag-red { margin-top:14px; }
     .transfer p { margin:4px 0; font-size:13px; }
 
     .sign { display:flex; justify-content:flex-end; margin-top:26px; }
@@ -127,20 +172,18 @@ function rupiah($n){ return 'Rp ' . number_format((float)$n, 0, ',', '.'); }
     .sign .title { font-size:12px; color:#374151; }
 
     /* cegah style global admin merusak layout invoice */
-    .paper, .paper * {
-      word-break: normal !important;
-      overflow-wrap: break-word !important;
-      border-radius: 0; box-shadow: none;
-    }
+    .paper, .paper * { word-break: normal !important; overflow-wrap: break-word !important; border-radius: 0; box-shadow: none; }
+
+    .muted { color:#6b7280; font-size:12px; }
   </style>
 </head>
 <body>
 <div class="container">
-  <!-- ===== SIDEBAR (copy dari invoice.php) ===== -->
+  <!-- SIDEBAR -->
   <aside class="sidebar">
     <div class="company-brand">
       <img src="<?= $LOGO_SRC ?>" alt="Logo PT Mandiri Andalan Utama" class="company-logo">
-        <p class="company-name">PT Mandiri Andalan Utama</p>
+      <p class="company-name">PT Mandiri Andalan Utama</p>
     </div>
     <div class="user-info">
       <div class="user-avatar"><?= e(strtoupper(substr($nama_user_admin, 0, 2))) ?></div>
@@ -179,7 +222,7 @@ function rupiah($n){ return 'Rp ' . number_format((float)$n, 0, ',', '.'); }
     </div>
   </aside>
 
-  <!-- ===== MAIN ===== -->
+  <!-- MAIN -->
   <main class="main-content">
     <header class="main-header">
       <h1>Detail Invoice</h1>
@@ -193,13 +236,15 @@ function rupiah($n){ return 'Rp ' . number_format((float)$n, 0, ',', '.'); }
       </div>
     </header>
 
-    <div class="invoice-canvas">
+    <div class="invoice-canvas <?= e($themeClass) ?>">
       <div class="paper">
         <!-- header -->
         <div class="brand">
           <img src="../image/manu.png" alt="Logo">
           <div>
-            <h1>PT. MANDIRI ANDALAN UTAMA</h1>
+            <h1>PT. MANDIRI ANDALAN UTAMA
+              <?php if($badgeText): ?><span class="badge-theme"><?= e($badgeText) ?></span><?php endif; ?>
+            </h1>
             <p class="muted">Committed to delivered the best result</p>
             <p>Jl Sultan Iskandar Muda No. 50 A-B</p>
             <p>Kebayoran Lama Selatan - Kebayoran Lama Jakarta Selatan 12240</p>
@@ -207,21 +252,30 @@ function rupiah($n){ return 'Rp ' . number_format((float)$n, 0, ',', '.'); }
           </div>
         </div>
 
-        <span class="tag-red">BILL TO:</span>
+        <?php if($hasBillToBank || $hasAddr1 || $hasAddr2 || $hasAddr3): ?>
+          <span class="tag-themed">BILL TO:</span>
+        <?php endif; ?>
 
         <!-- bill & info -->
         <div class="head-row">
           <div class="billto">
-            <p><strong><?= e($invoice['bill_to_bank'] ?? '') ?></strong></p>
-            <?php if(!empty($invoice['bill_to_address1'])): ?><p><?= e($invoice['bill_to_address1']) ?></p><?php endif; ?>
-            <?php if(!empty($invoice['bill_to_address2'])): ?><p><?= e($invoice['bill_to_address2']) ?></p><?php endif; ?>
-            <?php if(!empty($invoice['bill_to_address3'])): ?><p><?= e($invoice['bill_to_address3']) ?></p><?php endif; ?>
+            <?php if($hasBillToBank): ?><p><strong><?= e($invoice['bill_to_bank']) ?></strong></p><?php endif; ?>
+            <?php if($hasAddr1): ?><p><?= e($invoice['bill_to_address1']) ?></p><?php endif; ?>
+            <?php if($hasAddr2): ?><p><?= e($invoice['bill_to_address2']) ?></p><?php endif; ?>
+            <?php if($hasAddr3): ?><p><?= e($invoice['bill_to_address3']) ?></p><?php endif; ?>
+            <?php if(!empty($invoice['project_key'])): ?>
+              <p class="muted">Project: <?= e($invoice['project_key']) ?></p>
+            <?php endif; ?>
+            <?php if(!empty($invoice['nota_debet'])): ?>
+              <p class="muted">Nota Debet: <?= e($invoice['nota_debet']) ?></p>
+            <?php endif; ?>
           </div>
           <div class="info">
             <table>
               <tr><td class="label">No</td><td>:</td><td><?= e($invoice['invoice_number'] ?? '') ?></td></tr>
               <tr><td class="label">Tanggal</td><td>:</td><td><?= e(date('d/m/Y', strtotime($invoice['invoice_date'] ?? 'now'))) ?></td></tr>
-              <tr><td class="label">Up</td><td>:</td><td><?= e($invoice['person_up_name'] ?? '') ?></td></tr>
+              <?php if($hasUpName): ?><tr><td class="label">Up</td><td>:</td><td><?= e($invoice['person_up_name']) ?></td></tr><?php endif; ?>
+              <?php if($hasUpTitle): ?><tr><td class="label"></td><td></td><td class="muted"><?= e($invoice['person_up_title']) ?></td></tr><?php endif; ?>
             </table>
           </div>
         </div>
@@ -248,29 +302,98 @@ function rupiah($n){ return 'Rp ' . number_format((float)$n, 0, ',', '.'); }
           </tbody>
         </table>
 
-        <!-- summary -->
+        <!-- summary (dinamis) -->
         <table class="summary">
-          <tr><td>SUB TOTAL</td><td class="tr"><?= rupiah($invoice['sub_total'] ?? 0) ?></td></tr>
-          <tr><td>PPN</td><td class="tr"><?= rupiah($invoice['ppn_amount'] ?? 0) ?></td></tr>
-          <tr><td>PPH</td><td class="tr"><?= rupiah($invoice['pph_amount'] ?? 0) ?></td></tr>
-          <tr><td>GRAND TOTAL</td><td class="tr"><?= rupiah($invoice['grand_total'] ?? 0) ?></td></tr>
+          <?php if($hasMgmtFee): ?>
+            <tr>
+              <td>MANAGEMENT FEE <?= ((float)($invoice['mgmt_fee_percent'] ?? 0) > 0 ? '(' . rtrim(rtrim(number_format((float)$invoice['mgmt_fee_percent'],2,'.',''), '0'),'.') . '%)' : '') ?></td>
+              <td class="tr"><?= rupiah($invoice['mgmt_fee_amount'] ?? 0) ?></td>
+            </tr>
+          <?php endif; ?>
+
+          <?php if($hasSubTotal): ?>
+            <tr>
+              <td>SUB TOTAL</td>
+              <td class="tr"><?= rupiah($invoice['sub_total'] ?? 0) ?></td>
+            </tr>
+          <?php endif; ?>
+
+          <?php if($hasPPN): ?>
+            <tr>
+              <td>PPN <?= ((float)($invoice['ppn_percent'] ?? 0) > 0 ? '(' . rtrim(rtrim(number_format((float)$invoice['ppn_percent'],2,'.',''), '0'),'.') . '%)' : '') ?></td>
+              <td class="tr"><?= rupiah($invoice['ppn_amount'] ?? 0) ?></td>
+            </tr>
+          <?php endif; ?>
+
+          <?php if($hasPPH): ?>
+            <tr>
+              <td>PPH <?= ((float)($invoice['pph_percent'] ?? 0) > 0 ? '(' . rtrim(rtrim(number_format((float)$invoice['pph_percent'],2,'.',''), '0'),'.') . '%)' : '') ?></td>
+              <td class="tr"><?= rupiah($invoice['pph_amount'] ?? 0) ?></td>
+            </tr>
+          <?php endif; ?>
+
+          <?php if($hasAdjustments): ?>
+            <tr>
+              <td colspan="2" style="background:#fff;">
+                <div class="percent-items">
+                  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+                    <div><strong>Nama Penyesuaian (%)</strong></div>
+                    <div class="muted">Hasil simpan dari form</div>
+                  </div>
+                  <table style="width:100%;border-collapse:collapse;">
+                    <thead>
+                      <tr>
+                        <th style="text-align:left;border-bottom:1px solid #111;padding:6px;">Nama</th>
+                        <th style="text-align:left;border-bottom:1px solid #111;padding:6px;">Persen</th>
+                        <th style="text-align:right;border-bottom:1px solid #111;padding:6px;">Nilai</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <?php foreach($adjustments as $adj): ?>
+                        <tr>
+                          <td style="padding:6px;border-bottom:1px solid #eee;"><?= e($adj['label']) ?></td>
+                          <td style="padding:6px;border-bottom:1px solid #eee;"><?= rtrim(rtrim(number_format((float)$adj['percent'],2,'.',''), '0'),'.') ?> %</td>
+                          <td style="padding:6px;border-bottom:1px solid #eee;text-align:right;"><?= rupiah($adj['amount']) ?></td>
+                        </tr>
+                      <?php endforeach; ?>
+                    </tbody>
+                  </table>
+                </div>
+              </td>
+            </tr>
+          <?php endif; ?>
+
+          <?php if($hasGrand): ?>
+            <tr class="grand-themed">
+              <td>GRAND TOTAL</td>
+              <td class="tr"><?= rupiah($invoice['grand_total'] ?? 0) ?></td>
+            </tr>
+          <?php endif; ?>
         </table>
 
-        <!-- transfer -->
+        <!-- transfer (tampilkan hanya yang ada) -->
+        <?php if($hasTransferBank || $hasTransferNo || $hasTransferName): ?>
         <div class="transfer">
-          <span class="tag-red">Please Transfer to Account:</span>
-          <p><strong>Bank :</strong> <?= e($invoice['transfer_bank'] ?? '') ?></p>
-          <p><strong>Rekening Number :</strong> <?= e($invoice['transfer_account_no'] ?? '') ?></p>
-          <p><strong>A/C :</strong> <?= e($invoice['transfer_account_name'] ?? '') ?></p>
+          <span class="tag-themed">Please Transfer to Account:</span>
+          <?php if($hasTransferBank): ?><p><strong>Bank :</strong> <?= e($invoice['transfer_bank']) ?></p><?php endif; ?>
+          <?php if($hasTransferNo): ?><p><strong>Rekening Number :</strong> <?= e($invoice['transfer_account_no']) ?></p><?php endif; ?>
+          <?php if($hasTransferName): ?><p><strong>A/C :</strong> <?= e($invoice['transfer_account_name']) ?></p><?php endif; ?>
         </div>
+        <?php endif; ?>
 
         <!-- signature -->
         <div class="sign">
           <div class="box">
             <p class="date">Jakarta, <?= e(date('d F Y', strtotime($invoice['footer_date'] ?? 'now'))) ?></p>
             <br><br><br>
-            <p class="line"><?= e($invoice['manu_signatory_name'] ?? '') ?></p>
-            <p class="title"><?= e($invoice['manu_signatory_title'] ?? '') ?></p>
+            <?php if(!empty($invoice['manu_signatory_name'])): ?>
+              <p class="line"><?= e($invoice['manu_signatory_name']) ?></p>
+            <?php else: ?>
+              <p class="line">&nbsp;</p>
+            <?php endif; ?>
+            <?php if(!empty($invoice['manu_signatory_title'])): ?>
+              <p class="title"><?= e($invoice['manu_signatory_title']) ?></p>
+            <?php endif; ?>
           </div>
         </div>
       </div>

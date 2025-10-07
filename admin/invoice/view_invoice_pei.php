@@ -493,7 +493,7 @@ function rupiah_int($n) { return number_format((float)$n, 0, ',', '.'); }
             <tr class="row-total"><td colspan="2" style="text-align:right;">JUMLAH</td><td class="amount-col">Rp <?= rupiah_int($jumlah_setelah_fee) ?></td></tr>
             <tr><td style="text-align:center">3</td><td>PPN 11 % Fee</td><td class="amount-col">Rp <?= rupiah_int($ppn_11_fee) ?></td></tr>
             <tr class="row-total"><td colspan="2" style="text-align:right;">TOTAL TAGIHAN</td><td class="amount-col">Rp <?= rupiah_int($total_tagihan) ?></td></tr>
-            <tr><td style="text-align:center">4</td><td>PPH (2 % dari Fee)</td><td class="amount-col">Rp <?= rupiah_int($pph_2_fee) ?></td></tr>
+            <tr><td style="text-align:center">4</td><td>PPH 23 (2 % dari Fee)</td><td class="amount-col">Rp <?= rupiah_int($pph_2_fee) ?></td></tr>
             <tr class="row-total" style="background:#f3f4f6;"><td colspan="2" style="text-align:right;">TOTAL PAYMENT PEI</td><td class="amount-col">Rp <?= rupiah_int($total_payment_pei) ?></td></tr>
           </tbody>
         </table>

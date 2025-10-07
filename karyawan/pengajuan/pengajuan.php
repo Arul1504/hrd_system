@@ -11,9 +11,10 @@ if (!isset($_SESSION['id_karyawan'])) {
 // Sertakan file konfigurasi dan helper
 require '../config.php';
 
-// Fungsi bantuan untuk HTML escaping (jika belum ada di config.php)
+// Fungsi bantuan untuk HTML escaping
 if (!function_exists('e')) {
-    function e($text) {
+    function e($text)
+    {
         return htmlspecialchars($text, ENT_QUOTES, 'UTF-8');
     }
 }
@@ -47,23 +48,22 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 
     if ($jenis_pengajuan === 'Reimburse') {
         // =========================================================
-        // --- LOGIKA UNTUK REIMBURSE MULTIPLE ITEMS (FINAL) ---
+        // --- LOGIKA UNTUK REIMBURSE MULTIPLE ITEMS (JSON) ---
         // =========================================================
 
         $lokasi = $_POST['lokasi'];
         $kategori_utama = $_POST['kategori-utama'];
         $tanggal_utama = $_POST['tanggal-transaksi-utama'];
-        $project_karyawan = $user_info['proyek']; 
         
         $deskripsi_arr = isset($_POST['deskripsi']) ? $_POST['deskripsi'] : [];
         $nominal_arr = isset($_POST['nominal']) ? $_POST['nominal'] : [];
         $kwitansi_arr = isset($_FILES['kwitansi_file']) ? $_FILES['kwitansi_file'] : [];
-        
+        $tanggal_transaksi_arr = isset($_POST['tanggal_transaksi']) ? $_POST['tanggal_transaksi'] : [];
+
         $jumlah_item = count($deskripsi_arr);
         $total_nominal_semua_item = 0;
-        $detail_items = []; 
+        $detail_items_for_json = []; 
         $error_messages = [];
-        $dokumen_kwitansi_list = []; 
         $item_berhasil_diproses = 0;
 
         if ($jumlah_item == 0) {
@@ -72,54 +72,65 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         }
 
         // --- LOOPING UNTUK PROSES UPLOAD DAN KOMPILASI DATA ---
+        $upload_dir = '../../uploads/';
+        if (!is_dir($upload_dir)) {
+            mkdir($upload_dir, 0755, true);
+        }
+
         for ($i = 0; $i < $jumlah_item; $i++) {
-            
-            if (!isset($deskripsi_arr[$i]) || !isset($nominal_arr[$i]) || !isset($kwitansi_arr['error'][$i]) || $kwitansi_arr['error'][$i] !== 0) {
-                 continue; // Skip jika input dasar tidak ada atau file error
+
+            // Cek ketersediaan input dasar
+            if (!isset($deskripsi_arr[$i]) || !isset($nominal_arr[$i]) || !isset($tanggal_transaksi_arr[$i]) || !isset($kwitansi_arr['error'][$i])) {
+                continue; 
             }
 
             $current_deskripsi = $deskripsi_arr[$i];
-            // Bersihkan input nominal dari format ribuan
+            $current_tanggal = $tanggal_transaksi_arr[$i];
             $current_nominal = floatval(preg_replace('/[^\d]/', '', $nominal_arr[$i]));
             $kwitansi_filename = NULL;
 
             if (empty(trim($current_deskripsi)) || $current_nominal <= 0) {
-                $error_messages[] = "Item ke-" . ($i+1) . " (Deskripsi: " . $current_deskripsi . ") tidak valid.";
+                $error_messages[] = "Item ke-" . ($i + 1) . " (Deskripsi: " . $current_deskripsi . ") tidak valid.";
                 continue;
             }
-
+            
             // A. Proses unggah file Kwitansi
-            $upload_dir = '../../uploads/';
-            if (!is_dir($upload_dir)) {
-                mkdir($upload_dir, 0755, true);
-            }
-
-            $file_name = uniqid() . '-' . basename($kwitansi_arr['name'][$i]);
-            $file_path = $upload_dir . $file_name;
-            $allowed_types = ['pdf', 'jpg', 'jpeg', 'png']; 
-            $file_type = pathinfo($file_path, PATHINFO_EXTENSION);
-
-            if (in_array(strtolower($file_type), $allowed_types)) {
-                if (move_uploaded_file($kwitansi_arr['tmp_name'][$i], $file_path)) {
-                    $kwitansi_filename = $file_name;
+            if ($kwitansi_arr['error'][$i] === 0) {
+                $file_name = uniqid() . '-' . basename($kwitansi_arr['name'][$i]);
+                $file_path = $upload_dir . $file_name;
+                $allowed_types = ['pdf', 'jpg', 'jpeg', 'png'];
+                $file_type = pathinfo($file_path, PATHINFO_EXTENSION);
+                
+                if (in_array(strtolower($file_type), $allowed_types)) {
+                    if (move_uploaded_file($kwitansi_arr['tmp_name'][$i], $file_path)) {
+                        $kwitansi_filename = $file_name;
+                    } else {
+                        $error_messages[] = "Gagal mengunggah kwitansi item ke-" . ($i + 1) . ".";
+                        continue;
+                    }
                 } else {
-                    $error_messages[] = "Gagal mengunggah kwitansi item ke-" . ($i+1) . ".";
-                    continue; 
+                    $error_messages[] = "Tipe file kwitansi item ke-" . ($i + 1) . " tidak diizinkan.";
+                    continue;
                 }
             } else {
-                $error_messages[] = "Tipe file kwitansi item ke-" . ($i+1) . " tidak diizinkan.";
+                 // Wajib ada kwitansi
+                $error_messages[] = "Kwitansi item ke-" . ($i + 1) . " tidak terunggah atau ada error file.";
                 continue; 
             }
-            
+
             // B. Kumpulkan detail item dan hitung total
             $total_nominal_semua_item += $current_nominal;
-            $dokumen_kwitansi_list[] = $kwitansi_filename;
             
-            // Format: Deskripsi Item | Nominal | Nama File Kwitansi
-            // Menggunakan delimiter |~| untuk memisahkan antar item.
-            $detail_items[] = trim($current_deskripsi) . " | Nominal: Rp " . number_format($current_nominal, 0, ',', '.') . " | Kwitansi: " . $kwitansi_filename;
+            // Simpan detail ke array PHP untuk JSON
+            $detail_items_for_json[] = [
+                'deskripsi' => trim($current_deskripsi),
+                'nominal' => $current_nominal,
+                'kwitansi_file' => $kwitansi_filename,
+                'tanggal_transaksi' => $current_tanggal
+            ];
+
             $item_berhasil_diproses++;
-        } 
+        }
 
         // Validasi Akhir
         if ($item_berhasil_diproses <= 0) {
@@ -128,29 +139,43 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             exit();
         }
 
-        // 3. Gabungkan semua data menjadi satu entri pengajuan
-        
-        // Simpan detail LENGKAP ke kolom 'keterangan'
-        $all_items_details_string = implode(" |~| ", $detail_items);
-        $keterangan_final = $all_items_details_string;
-
-        // Simpan daftar semua nama file kwitansi (dipisahkan koma)
-        $dokumen_pendukung_final = implode(",", $dokumen_kwitansi_list);
+        // 3. Konversi Data & Finalisasi
+        $detail_reimburse_json = json_encode($detail_items_for_json, JSON_UNESCAPED_UNICODE);
+        $keterangan_final = "Pengajuan Reimburse untuk " . $item_berhasil_diproses . " item. Lokasi: " . e($lokasi);
+        $nominal_total_final = $total_nominal_semua_item; 
+        $dokumen_pendukung_final = NULL; 
 
         // Data Lain
         $tanggal_mulai_final = $tanggal_utama; 
         $tanggal_berakhir_final = $tanggal_utama; 
+        $category_final = $kategori_utama; 
         $nama_pengganti = NULL;
         $nik_pengganti = NULL;
         $wa_pengganti = NULL;
-        
-        // 4. Insert HANYA SATU entri ke tabel pengajuan
-        $sql = "INSERT INTO pengajuan (id_karyawan, nik_karyawan, jenis_pengajuan, tanggal_mulai, tanggal_berakhir, keterangan, dokumen_pendukung, nama_pengganti, nik_pengganti, wa_pengganti, status_pengajuan, tanggal_diajukan) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())";
-        
+
+        // 4. Insert ke tabel pengajuan
+        $sql = "INSERT INTO pengajuan (id_karyawan, nik_karyawan, jenis_pengajuan, tanggal_mulai, tanggal_berakhir, keterangan, dokumen_pendukung, nama_pengganti, nik_pengganti, wa_pengganti, status_pengajuan, tanggal_diajukan, nominal_total, detail_reimburse_json, category) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), ?, ?, ?)";
+
         $stmt = $conn->prepare($sql);
-        
-        $stmt->bind_param("issssssssss", $id_karyawan, $nik_user, $jenis_pengajuan, $tanggal_mulai_final, $tanggal_berakhir_final, $keterangan_final, $dokumen_pendukung_final, $nama_pengganti, $nik_pengganti, $wa_pengganti, $status_pengajuan);
-        
+
+        // String Tipe yang Benar: i s s s s s s s s s s d s s (14 Karakter)
+        $stmt->bind_param("issssssssssdss", 
+            $id_karyawan, 
+            $nik_user, 
+            $jenis_pengajuan, 
+            $tanggal_mulai_final, 
+            $tanggal_berakhir_final, 
+            $keterangan_final, 
+            $dokumen_pendukung_final, 
+            $nama_pengganti, 
+            $nik_pengganti, 
+            $wa_pengganti, 
+            $status_pengajuan, 
+            $nominal_total_final, 
+            $detail_reimburse_json,
+            $category_final
+        );
+
         if ($stmt->execute()) {
             $alert_message = "Pengajuan Reimbursement berhasil dikirim dengan " . $item_berhasil_diproses . " item (Total Rp. " . number_format($total_nominal_semua_item, 0, ',', '.') . ").";
             if (!empty($error_messages)) {
@@ -161,29 +186,31 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             $alert_message = "Gagal mengirim pengajuan reimburse: " . $stmt->error;
             echo "<script>alert('" . $alert_message . "');</script>";
         }
-        if(isset($stmt)) $stmt->close(); 
+        if (isset($stmt))
+            $stmt->close();
 
     } else {
         // =========================================================
-        // --- LOGIKA UNTUK CUTI, IZIN, SAKIT (SKEMA LAMA) ---
+        // --- LOGIKA UNTUK CUTI, IZIN, SAKIT ---
         // =========================================================
         $tanggal_mulai_final = $_POST['start-date'];
         $tanggal_berakhir_final = $_POST['end-date'];
         $keterangan_final = $_POST['reason'];
+        $category_final = NULL; 
 
         $nama_pengganti = !empty($_POST['replacement-name']) ? $_POST['replacement-name'] : NULL;
         $nik_pengganti = !empty($_POST['replacement-nik']) ? $_POST['replacement-nik'] : NULL;
         $wa_pengganti = !empty($_POST['replacement-wa']) ? $_POST['replacement-wa'] : NULL;
+        $nominal_total_final = 0.00; 
+        $detail_reimburse_json = NULL; 
 
         // Proses unggah file PDF untuk Cuti/Izin/Sakit
         $dokumen_pendukung_final = NULL;
         if (isset($_FILES['surat-file']) && $_FILES['surat-file']['error'] == 0) {
-             $upload_dir = '../../uploads/';
-            
-            if (!is_dir($upload_dir)) {
+            $upload_dir = '../../uploads/';
+             if (!is_dir($upload_dir)) {
                 mkdir($upload_dir, 0755, true);
             }
-
             $file_name = uniqid() . '-' . basename($_FILES['surat-file']['name']);
             $file_path = $upload_dir . $file_name;
             $file_type = pathinfo($file_path, PATHINFO_EXTENSION);
@@ -199,20 +226,38 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                 echo "<script>alert('Hanya file PDF yang diizinkan untuk surat.');</script>";
             }
         }
-        
-        // Insert Cuti/Izin/Sakit data ke database (hanya 1 baris)
-        $sql = "INSERT INTO pengajuan (id_karyawan, nik_karyawan, jenis_pengajuan, tanggal_mulai, tanggal_berakhir, keterangan, dokumen_pendukung, nama_pengganti, nik_pengganti, wa_pengganti, status_pengajuan, tanggal_diajukan) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())";
-    
+
+        // Insert Cuti/Izin/Sakit data ke database 
+        $sql = "INSERT INTO pengajuan (id_karyawan, nik_karyawan, jenis_pengajuan, tanggal_mulai, tanggal_berakhir, keterangan, dokumen_pendukung, nama_pengganti, nik_pengganti, wa_pengganti, status_pengajuan, tanggal_diajukan, nominal_total, detail_reimburse_json, category) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), ?, ?, ?)";
+
         $stmt = $conn->prepare($sql);
-        
-        $stmt->bind_param("issssssssss", $id_karyawan, $nik_user, $jenis_pengajuan, $tanggal_mulai_final, $tanggal_berakhir_final, $keterangan_final, $dokumen_pendukung_final, $nama_pengganti, $nik_pengganti, $wa_pengganti, $status_pengajuan);
-        
+
+        // String Tipe yang Benar: i s s s s s s s s s s d s s (14 Karakter)
+        $stmt->bind_param("issssssssssdss", 
+            $id_karyawan, 
+            $nik_user, 
+            $jenis_pengajuan, 
+            $tanggal_mulai_final, 
+            $tanggal_berakhir_final, 
+            $keterangan_final, 
+            $dokumen_pendukung_final, 
+            $nama_pengganti, 
+            $nik_pengganti, 
+            $wa_pengganti, 
+            $status_pengajuan, 
+            $nominal_total_final, 
+            $detail_reimburse_json,
+            $category_final
+        );
+
+
         if ($stmt->execute()) {
             echo "<script>alert('Pengajuan berhasil dikirim!'); window.location.href='pengajuan.php';</script>";
         } else {
             echo "<script>alert('Error: " . $stmt->error . "');</script>";
         }
-        if(isset($stmt)) $stmt->close();
+        if (isset($stmt))
+            $stmt->close();
     }
 }
 
@@ -237,28 +282,25 @@ $result_history = $stmt_history->get_result();
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
     <style>
-        /* Tambahkan di dalam tag <style> */
-        /* Style untuk layout form Reimburse (2 kolom) */
-        .reimburse-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 20px;
-        }
-
-        @media (max-width: 500px) {
-            .reimburse-grid {
-                grid-template-columns: 1fr;
-            }
-        }
-
-        /* General page layout (unchanged) */
+        /* ============================================== */
+        /* MODIFIKASI FINAL UNTUK MENGATASI KESEMPITAN */
+        /* ============================================== */
+        
+        /* 1. LAYOUT HALAMAN: Form (70-80%) vs History (20-30%) */
         .content-wrapper {
             display: grid;
             grid-template-areas: "form history";
-            grid-template-columns: 1fr 2fr;
+            /* Form 4 unit, History 1 unit */
+            grid-template-columns: 4fr 1fr; 
             gap: 30px;
         }
 
+        @media (max-width: 1024px) {
+            .content-wrapper {
+                grid-template-columns: 3fr 2fr; /* Sedikit lebih imbang di tablet */
+            }
+        }
+        
         @media (max-width: 768px) {
             .content-wrapper {
                 grid-template-areas: "form" "history";
@@ -266,6 +308,88 @@ $result_history = $stmt_history->get_result();
             }
         }
 
+        /* 2. LAYOUT REIMBURSE ITEM: Alokasi ruang yang lebih baik untuk Deskripsi */
+        .reimburse-item-row .reimburse-grid {
+            /* 4 kolom: Deskripsi (3fr), Nominal (1.5fr), Kwitansi (1.5fr), Tanggal (1.5fr) */
+            display: grid;
+            grid-template-columns: 3fr 1.5fr 1.5fr 1.5fr; 
+            gap: 15px;
+            align-items: flex-end;
+        }
+
+        @media (max-width: 768px) {
+            /* Di mobile/tablet, kembali ke layout 2 kolom */
+            .reimburse-item-row .reimburse-grid {
+                grid-template-columns: 1fr 1fr;
+            }
+        }
+        
+        /* 3. INPUT FIELD STYLING (Diperkecil sedikit) */
+        .form-group select,
+        .form-group input[type="text"],
+        .form-group input[type="number"],
+        .form-group input[type="date"],
+        .form-group textarea {
+            padding: 10px; 
+            border-radius: 6px; 
+            font-size: 0.95rem; 
+        }
+
+        /* 4. RIWAYAT PENGAJUAN (Diperkecil dan dibuat vertikal) */
+        .submission-history {
+            grid-area: history;
+        }
+
+        .history-list {
+            gap: 8px; /* Kurangi gap antar item */
+        }
+
+        .history-item {
+            display: flex;
+            flex-direction: column; /* Menjadi vertikal untuk menghemat lebar */
+            justify-content: flex-start;
+            align-items: flex-start;
+            padding: 10px 12px; /* Ringkas */
+            border: 1px solid #e0e0e0;
+            border-radius: 6px;
+        }
+        
+        .history-details {
+            flex-grow: 1;
+            width: 100%;
+            gap: 2px;
+        }
+
+        .submission-type {
+            font-size: 0.95rem; 
+        }
+
+        .submission-date {
+            font-size: 0.8rem; 
+        }
+
+        .submission-note {
+            font-size: 0.75rem; /* Paling ringkas */
+            color: #888;
+            white-space: normal; /* Biarkan teks keterangan wrap */
+            margin-top: 5px;
+        }
+        
+        .history-status-wrapper {
+            width: 100%;
+            display: flex;
+            justify-content: flex-end; /* Posisikan status di kanan */
+            margin-top: 5px;
+        }
+
+        .history-status {
+            padding: 4px 10px;
+            border-radius: 15px;
+            font-size: 0.7rem; /* Paling kecil untuk status */
+            min-width: 70px; 
+        }
+
+        /* CSS Lainnya (Unchanged or Minor Adjustments) */
         .section {
             background-color: #ffffff;
             border-radius: 12px;
@@ -280,7 +404,6 @@ $result_history = $stmt_history->get_result();
             color: #333;
         }
 
-        /* Form Styling */
         .submission-form {
             grid-area: form;
             display: flex;
@@ -299,41 +422,20 @@ $result_history = $stmt_history->get_result();
             font-size: 0.95rem;
         }
 
-        .form-group select,
-        .form-group input[type="text"],
-        .form-group input[type="number"], /* Pastikan type number ter-style */
-        .form-group input[type="date"],
-        .form-group textarea {
-            width: 100%;
-            padding: 12px;
-            border: 1px solid #ddd;
-            border-radius: 8px;
-            box-sizing: border-box;
-            font-family: 'Poppins', sans-serif;
-            font-size: 1rem;
-            background-color: #f9f9f9;
-            transition: border-color 0.3s, box-shadow 0.3s;
-        }
-
-        .form-group select:focus,
-        .form-group input[type="text"]:focus,
-        .form-group input[type="number"]:focus,
-        .form-group input[type="date"]:focus,
-        .form-group textarea:focus {
-            outline: none;
-            border-color: #4285f4;
-            box-shadow: 0 0 0 3px rgba(66, 133, 244, 0.2);
-        }
-
         .form-group textarea {
             resize: vertical;
             min-height: 100px;
         }
+        
+        .reimburse-item-row .form-group textarea {
+            min-height: 40px !important; 
+        }
+
 
         .btn-submit {
             background-color: #28a745;
             color: #fff;
-            padding: 15px;
+            padding: 12px;
             border: none;
             border-radius: 8px;
             font-weight: 600;
@@ -351,73 +453,6 @@ $result_history = $stmt_history->get_result();
         .btn-submit:hover {
             background-color: #218838;
             box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
-        }
-
-        /* History Styling */
-        .submission-history {
-            grid-area: history;
-        }
-
-        .history-list {
-            list-style: none;
-            padding: 0;
-            margin: 0;
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
-        }
-
-        .history-item {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 15px 20px;
-            border: 1px solid #e0e0e0;
-            border-radius: 8px;
-            transition: box-shadow 0.3s, transform 0.3s;
-        }
-
-        .history-item:hover {
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
-            transform: translateY(-2px);
-        }
-
-        .history-details {
-            flex-grow: 1;
-            display: flex;
-            flex-direction: column;
-            gap: 5px;
-        }
-
-        .submission-type {
-            font-size: 1.1rem;
-            font-weight: 600;
-            color: #333;
-        }
-
-        .submission-date {
-            font-size: 0.9rem;
-            color: #666;
-        }
-
-        .submission-note {
-            font-size: 0.85rem;
-            color: #888;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            max-width: 100%;
-        }
-
-        .history-status {
-            padding: 6px 15px;
-            border-radius: 20px;
-            font-size: 0.8rem;
-            font-weight: 600;
-            color: #fff;
-            text-align: center;
-            min-width: 90px;
-            text-transform: capitalize;
         }
 
         .status-menunggu {
@@ -440,13 +475,9 @@ $result_history = $stmt_history->get_result();
             border-radius: 8px;
             border: 1px dashed #ddd;
         }
-
-        .history-empty p {
-            margin: 0;
-        }
         
         .reimburse-item-row .form-group label {
-            font-weight: 400; /* label item lebih tipis */
+            font-weight: 400;
         }
     </style>
 </head>
@@ -565,8 +596,9 @@ $result_history = $stmt_history->get_result();
                                     <label for="kategori-utama">Kategori</label>
                                     <select id="kategori-utama" name="kategori-utama" required>
                                         <option value="">Pilih Kategori Utama...</option>
-                                        <option value="Perjalanan Dinas">Perjalanan Dinas</option>
-                                        <option value="Kantor">Kantor</option>
+                                        <option value="f&b">F&B</option>
+                                        <option value="iklan">Iklan</option>
+                                        <option value="other">Other</option>
                                     </select>
                                 </div>
                             </div>
@@ -578,7 +610,7 @@ $result_history = $stmt_history->get_result();
                                         value="<?= e($email) ?>" readonly required>
                                 </div>
                                 <div class="form-group">
-                                    <label for="tanggal-transaksi-utama">Tanggal Transaksi</label>
+                                    <label for="tanggal-transaksi-utama">Tanggal Pengajuan</label>
                                     <input type="date" id="tanggal-transaksi-utama" name="tanggal-transaksi-utama"
                                         required>
                                 </div>
@@ -588,7 +620,7 @@ $result_history = $stmt_history->get_result();
 
                             <h3>Rincian Pengeluaran</h3>
                             <div id="item-list">
-                                </div>
+                            </div>
 
                             <button type="button" onclick="addReimbursementRow(event)" class="btn-submit"
                                 style="background-color: #007bff; max-width: 150px; margin-left: 0;">
@@ -613,32 +645,29 @@ $result_history = $stmt_history->get_result();
                         <?php
                         if ($result_history->num_rows > 0) {
                             while ($row = $result_history->fetch_assoc()) {
-                                
+
                                 // --- LOGIKA RINGKASAN BARU UNTUK REIMBURSE ---
                                 $keterangan_tampil = "";
                                 $pengganti_display = "";
-                                
+
                                 if ($row['jenis_pengajuan'] === 'Reimburse') {
                                     
-                                    // Menghitung jumlah item
-                                    $item_count = substr_count($row['keterangan'], '|~|') + 1;
+                                    // Ambil Nominal Total
+                                    $nominal_total_disp = isset($row['nominal_total']) ? number_format($row['nominal_total'], 0, ',', '.') : 'N/A';
                                     
-                                    // Menghitung jumlah kwitansi
-                                    $file_count = substr_count($row['dokumen_pendukung'], ',');
-                                    if (!empty($row['dokumen_pendukung'])) {
-                                        $file_count += 1;
-                                    } else {
-                                        $file_count = 0;
-                                    }
+                                    // Hitung jumlah item dari JSON 
+                                    $reimburse_details = json_decode($row['detail_reimburse_json'] ?? '[]', true);
+                                    $item_count = is_array($reimburse_details) ? count($reimburse_details) : 0;
+                                    $category_disp = !empty($row['category']) ? " | Kategori: " . e($row['category']) : "";
+                                    
+                                    $keterangan_tampil = $item_count . " Item | Total Rp. " . $nominal_total_disp . $category_disp;
 
-                                    $keterangan_tampil = "Reimburse: " . $item_count . " Item | " . $file_count . " Kwitansi Terlampir. (Detail di sistem Admin)";
-                                    
                                 } else {
                                     // Cuti/Izin/Sakit
                                     if (!empty($row['nama_pengganti'])) {
                                         $pengganti_display = " | Pengganti: " . e($row['nama_pengganti']);
                                     }
-                                    
+
                                     // Ambil 100 karakter pertama dari keterangan
                                     $keterangan_singkat_cuti = e($row['keterangan']);
                                     if (strlen($keterangan_singkat_cuti) > 100) {
@@ -648,7 +677,7 @@ $result_history = $stmt_history->get_result();
                                     $keterangan_tampil = "Keterangan: " . $keterangan_singkat_cuti . $pengganti_display;
                                 }
                                 // --- AKHIR LOGIKA RINGKASAN BARU ---
-
+                        
                                 // Menentukan kelas status
                                 $status_class = strtolower($row['status_pengajuan']);
                                 switch ($status_class) {
@@ -673,7 +702,9 @@ $result_history = $stmt_history->get_result();
                                         <p class="submission-date"><i class="fas fa-calendar-alt"></i> ' . date('d M Y', strtotime($row['tanggal_mulai'])) . ' - ' . date('d M Y', strtotime($row['tanggal_berakhir'])) . '</p>
                                         <p class="submission-note">' . $keterangan_tampil . '</p>
                                     </div>
-                                    <div class="history-status ' . $status_style . '">' . e($row['status_pengajuan']) . '</div>
+                                    <div class="history-status-wrapper">
+                                        <div class="history-status ' . $status_style . '">' . e($row['status_pengajuan']) . '</div>
+                                    </div>
                                 </li>';
                             }
                         } else {
@@ -686,111 +717,123 @@ $result_history = $stmt_history->get_result();
         </main>
     </div>
     <script>
-    // Template HTML untuk baris item Reimburse yang akan diduplikasi
-    const ITEM_TEMPLATE = `
-        <div class="reimburse-item-row" style="border-top: 1px dashed #eee; padding-top: 15px; margin-top: 15px;">
+        // Template HTML untuk baris item Reimburse yang akan diduplikasi
+        const ITEM_TEMPLATE = `
+        <div class="reimburse-item-row" style="border-top: 1px dashed #eee; padding-top: 15px; margin-top: 15px; position: relative;">
+            
             <button type="button" onclick="removeReimbursementRow(event)" 
-                style="float: right; color: #e74c3c; background: none; border: none; cursor: pointer; font-size: 0.9rem;">
+                style="position: absolute; top: -5px; right: 0; color: #e74c3c; background: none; border: none; cursor: pointer; font-size: 0.9rem;">
                 <i class="fas fa-times-circle"></i> Hapus Item
             </button>
-            <div class="reimburse-grid" style="grid-template-columns: 2fr 1fr 1fr; align-items: flex-end;">
+
+            <div class="reimburse-grid"> 
+                
                 <div class="form-group" style="margin-bottom: 0;">
                     <label>Deskripsi Pengeluaran</label>
-                    <textarea name="deskripsi[]" placeholder="Jelaskan rincian pengeluaran..." required style="min-height: 45px;"></textarea>
+                    <textarea name="deskripsi[]" placeholder="Jelaskan rincian pengeluaran..." required></textarea> 
                 </div>
+
                 <div class="form-group" style="margin-bottom: 0;">
                     <label>Nominal (Rp)</label>
                     <input type="number" name="nominal[]" min="1" placeholder="0" required>
                 </div>
+
                 <div class="form-group" style="margin-bottom: 0;">
-                    <label>Kwitansi</label>
-                    <input type="file" name="kwitansi_file[]" accept=".pdf, .jpg, .jpeg, .png" required> 
-                    <small class="file-note" style="color: #777; font-size: 0.8rem; margin-top: 5px;">*PDF/JPG/PNG.</small>
+            <label>Kwitansi</label>
+            <input type="file" name="kwitansi_file[]" accept=".pdf, .jpg, .jpeg, .png" class="file-input-reimburse" required>
+            <small class="file-note" style="color: #777; font-size: 0.8rem; margin-top: 5px; display: block;">*Maks 2MB, PDF/JPG/PNG.</small>
+        </div>
+
+                <div class="form-group" style="margin-bottom: 0;">
+                    <label>Tanggal Transaksi</label>
+                    <input type="date" name="tanggal_transaksi[]" required>
                 </div>
+
             </div>
         </div>
-    `;
-
-    document.addEventListener('DOMContentLoaded', function () {
-        const submissionType = document.getElementById('submission-type');
-        const standardFields = document.getElementById('standard-fields');
-        const reimburseFields = document.getElementById('reimburse-fields');
-        const itemList = document.getElementById('item-list');
-        
-        // Elemen-elemen yang perlu diatur `required` di form standard
-        const standardInputs = standardFields.querySelectorAll('input:not([type="file"]), select, textarea');
-        const standardFile = document.getElementById('surat-file');
-
-        // Elemen-elemen yang perlu diatur `required` di form reimburse (base fields)
-        const baseReimburseInputs = reimburseFields.querySelectorAll('.reimburse-grid input:not([type="file"]), .reimburse-grid select');
+`;
 
 
-        function setRequired(elements, isRequired) {
-            elements.forEach(el => {
-                // Kecuali field yang opsional (pengganti)
-                if (el.id !== 'replacement-name' && el.id !== 'replacement-nik' && el.id !== 'replacement-wa') {
-                    if (isRequired) {
-                        el.setAttribute('required', 'required');
-                    } else {
-                        el.removeAttribute('required');
+        document.addEventListener('DOMContentLoaded', function () {
+            const submissionType = document.getElementById('submission-type');
+            const standardFields = document.getElementById('standard-fields');
+            const reimburseFields = document.getElementById('reimburse-fields');
+            const itemList = document.getElementById('item-list');
+
+            // Elemen-elemen yang perlu diatur `required` di form standard
+            const standardInputs = standardFields.querySelectorAll('input:not([type="file"]), select, textarea');
+            const standardFile = document.getElementById('surat-file');
+
+            // Elemen-elemen yang perlu diatur `required` di form reimburse (base fields)
+            const baseReimburseInputs = reimburseFields.querySelectorAll('.reimburse-grid input:not([type="file"]), .reimburse-grid select');
+
+
+            function setRequired(elements, isRequired) {
+                elements.forEach(el => {
+                    // Kecuali field yang opsional (pengganti)
+                    if (el.id !== 'replacement-name' && el.id !== 'replacement-nik' && el.id !== 'replacement-wa') {
+                        if (isRequired) {
+                            el.setAttribute('required', 'required');
+                        } else {
+                            el.removeAttribute('required');
+                        }
                     }
+                });
+            }
+
+            // Fungsi utama untuk menampilkan/menyembunyikan form
+            window.toggleForm = function () {
+                const selectedType = submissionType.value;
+
+                // Atur visibility
+                standardFields.style.display = (selectedType === 'Reimburse' || selectedType === '') ? 'none' : 'block';
+                reimburseFields.style.display = (selectedType === 'Reimburse') ? 'block' : 'none';
+
+                // Reset semua required
+                setRequired(standardInputs, false);
+                setRequired(baseReimburseInputs, false);
+                standardFile.removeAttribute('required');
+
+                // Hapus semua item list dan buat satu item baru setiap kali Reimburse dipilih
+                if (itemList) {
+                    itemList.innerHTML = '';
                 }
-            });
-        }
-        
-        // Fungsi utama untuk menampilkan/menyembunyikan form
-        window.toggleForm = function () {
-            const selectedType = submissionType.value;
 
-            // Atur visibility
-            standardFields.style.display = (selectedType === 'Reimburse' || selectedType === '') ? 'none' : 'block';
-            reimburseFields.style.display = (selectedType === 'Reimburse') ? 'block' : 'none';
+                // Atur required untuk form yang aktif
+                if (selectedType === 'Reimburse') {
+                    setRequired(baseReimburseInputs, true);
+                    // Tambahkan item pertama secara otomatis saat Reimburse dipilih
+                    addReimbursementRow();
+                } else if (selectedType !== '') {
+                    // Cuti/Izin/Sakit
+                    setRequired(standardInputs, true);
+                    standardFile.setAttribute('required', 'required');
+                }
+            }
 
-            // Reset semua required
-            setRequired(standardInputs, false);
-            setRequired(baseReimburseInputs, false);
-            standardFile.removeAttribute('required');
-            
-            // Hapus semua item list dan buat satu item baru setiap kali Reimburse dipilih
-            if (itemList) {
-                itemList.innerHTML = '';
+            // Fungsi untuk menghapus baris item
+            window.removeReimbursementRow = function (event) {
+                if (event) event.preventDefault();
+                const rowToRemove = event.target.closest('.reimburse-item-row');
+                if (rowToRemove) {
+                    rowToRemove.remove();
+                }
+                // Pastikan setidaknya ada satu item yang tersisa
+                if (itemList.children.length === 0) {
+                    addReimbursementRow();
+                }
             }
-            
-            // Atur required untuk form yang aktif
-            if (selectedType === 'Reimburse') {
-                setRequired(baseReimburseInputs, true);
-                // Tambahkan item pertama secara otomatis saat Reimburse dipilih
-                addReimbursementRow(); 
-            } else if (selectedType !== '') {
-                 // Cuti/Izin/Sakit
-                setRequired(standardInputs, true);
-                standardFile.setAttribute('required', 'required');
+
+            // Fungsi untuk menambahkan baris item baru
+            window.addReimbursementRow = function (event) {
+                if (event) event.preventDefault();
+                itemList.insertAdjacentHTML('beforeend', ITEM_TEMPLATE);
             }
-        }
-        
-        // Fungsi untuk menghapus baris item
-        window.removeReimbursementRow = function(event) {
-            event.preventDefault();
-            const rowToRemove = event.target.closest('.reimburse-item-row');
-            if (rowToRemove) {
-                rowToRemove.remove();
-            }
-            // Pastikan setidaknya ada satu item yang tersisa
-            if (itemList.children.length === 0) {
-                 addReimbursementRow();
-            }
-        }
-        
-        // Fungsi untuk menambahkan baris item baru
-        window.addReimbursementRow = function(event) {
-            if (event) event.preventDefault();
-            itemList.insertAdjacentHTML('beforeend', ITEM_TEMPLATE);
-        }
-        
-        // Panggil saat halaman dimuat untuk memastikan tampilan awal sudah benar
-        toggleForm(); 
-    });
-</script>
+
+            // Panggil saat halaman dimuat untuk memastikan tampilan awal sudah benar
+            toggleForm();
+        });
+    </script>
 </body>
 
 </html>

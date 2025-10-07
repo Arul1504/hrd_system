@@ -234,7 +234,7 @@ $total_pending_reimburse = $result_pending_reimburse->fetch_assoc()['total_pendi
                         <tr>
                             <th>ID</th>
                             <th>Karyawan</th>
-                            <th>Tanggal Reimb.</th>
+                            <th>Tanggal Pengajuan</th>
                             <th>Total Item</th>
                             <th>Status</th>
                             <th>Notes Persetujuan</th> <th>Aksi</th>
@@ -342,7 +342,13 @@ $total_pending_reimburse = $result_pending_reimburse->fetch_assoc()['total_pendi
                                                 onclick="toggleDetailRow(<?= e($row['id_pengajuan']) ?>, true)">
                                                 <i class="fas fa-eye"></i>
                                             </button>
-                                            
+                                            <?php 
+                                            // URL untuk generate PDF (arahkan ke skrip baru)
+                                            $pdf_url = 'generate_pdf_reimburse.php?id=' . e($row['id_pengajuan']);
+                                            ?>
+                                            <a href="<?= $pdf_url ?>" target="_blank" class="action-btn" title="Unduh Pengajuan Reimburse (PDF)" style="background-color: #c0392b;">
+                                                <i class="fas fa-file-pdf"></i>
+                                            </a>
                                             <?php if ($row['status_pengajuan'] === 'Menunggu'): ?>
                                                 <a href="#" class="action-btn approve-btn" title="Setujui"
                                                     onclick="processAction('approve', '<?= e($row['id_pengajuan']) ?>'); return false;">
@@ -355,6 +361,7 @@ $total_pending_reimburse = $result_pending_reimburse->fetch_assoc()['total_pendi
                                             <?php endif; ?>
                                         </div>
                                     </td>
+                                    
                                 </tr>
                                 <tr id="detail-<?= e($row['id_pengajuan']) ?>" class="detail-row">
                                     <td colspan="7"> <div class="detail-content">

@@ -139,55 +139,44 @@ $email_tujuan = $r['email'] ?? '';
             line-height: 1.5;
         }
 
-        /* KOP */
-        .kop {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            /* jarak sangat dekat agar "nempel tapi tetap rapi" */
-            border-bottom: 2px solid #2c3e50;
-            padding-bottom: 12px;
-            margin-bottom: 14px;
+        /* === KOP SURAT BARU === */
+        .header-pt {
+            border-bottom: 3px solid #f00;
+            padding-bottom: 10px;
+            margin-bottom: 25px;
+            text-align: center;
         }
 
-        .kop .logo {
-            width: 75px;
+        .kop-wrapper {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            /* Supaya posisi keseluruhan di tengah */
+            gap: 15px;
+        }
+
+        .logo-area img {
+            width: 95px;
+            /* Bisa kamu kecilkan/besarkan sesuai kebutuhan */
             height: auto;
         }
 
-        .kop-text {
-            display: flex;
-            flex-direction: column;
+        .text-area {
+            text-align: center;
+            /* Isi teks tetap rata tengah */
+            line-height: 1.3;
         }
 
-        .kop-title {
-            font-size: 20px;
-            font-weight: 800;
-            line-height: 1.2;
+        .text-area h1 {
+            margin: ;
+            font-size: 25pt;
+            font-weight: 700;
         }
 
-        .kop-title .m {
-            color: #080808ff;
-        }
-
-        .kop-title .a {
-            color: #111;
-        }
-
-        .kop-title .u {
-            color: #050404ff;
-        }
-
-        .kop-alamat {
-            font-size: 13px;
-            color: #444;
-            line-height: 1.4;
-            margin-top: 4px;
-        }
-
-        .kop-alamat a {
-            color: #0056b3;
-            text-decoration: underline;
+        .text-area p {
+            margin: 16px 0 0;
+            font-size: 10pt;
+            line-height: 1.3;
         }
 
         /* Judul & Nomor */
@@ -476,21 +465,25 @@ $email_tujuan = $r['email'] ?? '';
 
             <!-- Isi Surat -->
             <section class="surat" id="surat-tugas-dokumen">
-                <div class="kop">
-                    <img src="../image/manu.png" alt="Logo" class="logo">
-                    <div class="kop-text">
-                        <div class="kop-title">
-                            PT. <span class="m">MANDIRI</span> <span class="a">ANDALAN</span> <span
-                                class="u">UTAMA</span>
+                <div class="header-pt">
+                    <div class="kop-wrapper">
+                        <div class="logo-area">
+                            <img src="../image/manu.png" alt="Logo PT Mandiri Andalan Utama">
                         </div>
-                        <div class="kop-alamat">
-                            Jl. Sultan Iskandar Muda No. 30 A – B Lt. 3, Arteri Pondok Indah<br>
-                            Kebayoran Lama Selatan – Jakarta Selatan 12240<br>
-                            Telp: (021) 27518306 &nbsp;&nbsp; Web: <a
-                                href="http://www.manu.co.id/">http://www.manu.co.id/</a>
+                        <div class="text-area">
+                            <h1>
+                                PT.
+                                <span style="color: red;">M</span>ANDIRI
+                                <span style="color: red;">A</span>NDALA<span style="color: red;">N</span>
+                                <span style="color: red;">U</span>TAMA
+                            </h1>
+                            <p>
+                                Jl. Sultan Iskandar Muda No. 30 A – B Lt. 3, Arteri Pondok Indah<br>
+                                Kebayoran Lama Selatan - Kebayoran Lama – Jakarta Selatan 12240<br>
+                                Telp: (021) 27518306 Web: http://www.manu.co.id/
+                            </p>
                         </div>
                     </div>
-
                 </div>
 
                 <div class="judul">SURAT TUGAS</div>
@@ -578,7 +571,7 @@ $email_tujuan = $r['email'] ?? '';
 
             const opt = {
                 margin: [5, 5, 5, 5],
-                filename: 'Surat-Tugas.pdf',
+                filename: `Surat-Tugas-${"<?= e($file_no_surat) ?>"}`, // Gunakan backticks dan nama file dari PHP
                 image: { type: 'jpeg', quality: 0.9 },
                 html2canvas: { scale: 2, useCORS: true },
                 jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
@@ -612,11 +605,11 @@ $email_tujuan = $r['email'] ?? '';
                 btn.innerHTML = original;
             });
         }
-
         function downloadSuratAsPDF(fileNamePrefix) {
             const element = document.getElementById('surat-tugas-dokumen');
             const opt = {
                 margin: [6, 6, 6, 6],
+                // PERBAIKAN: Gunakan backticks untuk template literal
                 filename: `Surat-Tugas-${fileNamePrefix}.pdf`,
                 image: { type: 'jpeg', quality: 0.98 },
                 html2canvas: { scale: 2, useCORS: true },

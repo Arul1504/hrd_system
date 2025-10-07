@@ -119,6 +119,49 @@ function formatTanggalIndonesia($tgl)
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" />
     <link rel="stylesheet" href="../../style.css">
     <style>
+        .header-pt {
+    border-bottom: 3px solid #f00;
+    padding-bottom: 10px;
+    margin-bottom: 25px;
+    text-align: center;
+}
+
+
+.kop-wrapper {
+    display: flex;
+    align-items: center;
+    justify-content: center; /* Supaya posisi keseluruhan di tengah */
+    gap: 15px;
+}
+
+.logo-area img {
+    width: 95px;   /* Bisa kamu kecilkan/besarkan sesuai kebutuhan */
+    height: auto;
+}
+
+.text-area {
+    text-align: center; /* Isi teks tetap rata tengah */
+    line-height: 1.3;
+}
+
+.text-area h1 {
+    margin: ;
+    font-size: 25pt;
+    font-weight: 700;
+}
+
+.text-area p {
+    margin: 16px 0 0;
+    font-size: 10pt;
+    line-height: 1.3;
+}
+
+.garis-merah {
+    width: 100%;
+    height: 3px;
+    background-color: red;
+    margin: 10px 0 20px 0;
+}
         .surat-input-controls {
             display: flex;
             gap: 15px;
@@ -148,33 +191,7 @@ function formatTanggalIndonesia($tgl)
             padding: 30px;
         }
 
-        .header-pt {
-            text-align: center;
-            border-bottom: 3px solid #f00;
-            padding-bottom: 5px;
-            margin-bottom: 25px;
-        }
-
-        .header-pt img {
-            width: 50px;
-            height: auto;
-            margin-bottom: 5px;
-        }
-
-        .header-pt h1 {
-            margin: 0;
-            font-size: 16pt;
-            font-weight: 700;
-            color: #f00;
-            /* Merah PT */
-        }
-
-        .header-pt p {
-            margin: 0;
-            font-size: 8pt;
-            line-height: 1.2;
-        }
-
+       
         .surat-title {
             text-align: center;
             font-size: 12pt;
@@ -408,15 +425,25 @@ function formatTanggalIndonesia($tgl)
             </div>
 
             <div class="surat-rekening-wrapper">
-                <div class="header-pt">
-                    <img src="../../image/manu.png" alt="Logo PT Mandiri Andalan Utama">
-                    <h1>PT. MANDIRI ANDALAN UTAMA</h1>
-                    <p>
-                        <?= $alamat_perusahaan ?><br>
-                        Telp: <?= $telepon_perusahaan ?> <br>
-                        Web: <a href="<?= $website_perusahaan ?>"><?= $website_perusahaan ?></a>
-                    </p>
-                </div>
+                <div class="kop-wrapper">
+    <div class="logo-area">
+        <img src="../../image/manu.png" alt="Logo PT Mandiri Andalan Utama">
+    </div>
+    <div class="text-area">
+        <h1>
+            PT.
+            <span style="color: red;">M</span>ANDIRI
+            <span style="color: red;">A</span>NDALA<span style="color: red;">N</span>
+            <span style="color: red;">U</span>TAMA
+        </h1>
+        <p>
+            Jl. Sultan Iskandar Muda No. 30 A – B Lt. 3, Arteri Pondok Indah<br>
+            Kebayoran Lama Selatan - Kebayoran Lama – Jakarta Selatan 12240<br>
+            Telp: (021) 27518306 Web: http://www.manu.co.id/
+        </p>
+    </div>
+</div>
+<div class="garis-merah"></div>
 
                 <div class="surat-title">Surat Rekomendasi Pembukaan Rekening Bank</div>
                 <div class="nomor-surat" id="nomor_surat_tampilan"><?= $default_nomor_surat ?></div>

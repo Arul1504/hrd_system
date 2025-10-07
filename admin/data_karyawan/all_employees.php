@@ -592,14 +592,17 @@ $conn->close();
                             <li><a href="karyawan_nonaktif.php">Non-Aktif</a></li>
                         </ul>
                     </li>
-                   <li class="dropdown-trigger">
-                            <a href="#" class="dropdown-link"><i class="fas fa-users"></i> Data Pengajuan <i class="fas fa-caret-down"><span class="badge"><?= $total_pending ?></span></i></a>
-                            <ul class="dropdown-menu">
-                                <li><a href="../pengajuan/pengajuan.php">Pengajuan</a></li>
-                                <li><a href="../pengajuan/kelola_pengajuan.php">Kelola Pengajuan<span class="badge"><?= $total_pending ?></span></a></li>
-                                <li><a href="../pengajuan/kelola_reimburse.php">Kelola Reimburse<span class="badge"><?= $total_pending ?></span></a></li>
-                            </ul>
-                        </li>
+                    <li class="dropdown-trigger">
+                        <a href="#" class="dropdown-link"><i class="fas fa-users"></i> Data Pengajuan <i
+                                class="fas fa-caret-down"><span class="badge"><?= $total_pending ?></span></i></a>
+                        <ul class="dropdown-menu">
+                            <li><a href="../pengajuan/pengajuan.php">Pengajuan</a></li>
+                            <li><a href="../pengajuan/kelola_pengajuan.php">Kelola Pengajuan<span
+                                        class="badge"><?= $total_pending ?></span></a></li>
+                            <li><a href="../pengajuan/kelola_reimburse.php">Kelola Reimburse<span
+                                        class="badge"><?= $total_pending ?></span></a></li>
+                        </ul>
+                    </li>
                     <li><a href="../monitoring_kontrak/monitoring_kontrak.php"><i class="fas fa-calendar-alt"></i>
                             Monitoring Kontrak</a></li>
                     <li><a href="../monitoring_kontrak/surat_tugas_history.php"><i class="fas fa-file-alt"></i> Riwayat
@@ -661,7 +664,6 @@ $conn->close();
                                     <?php
                                     $cnaf_sub_list = [
                                         'SPR&BRO',
-                                        'FORM BEDA TTD',
                                         'SBI ZONA B',
                                         'SBI ZOBA A',
                                         'SPR&BRO SENIOR',
@@ -734,7 +736,8 @@ $conn->close();
                                                 data-proyek="<?= e($employee['proyek'] ?? '') ?>" title="Ubah"
                                                 onclick="openEditModal('<?= e($employee['id_karyawan']) ?>','<?= e($employee['proyek'] ?? '') ?>'); return false;"><i
                                                     class="fas fa-edit"></i></a>
-                                            <?php if (($employee['proyek'] ?? '') === 'CNAF'): ?>
+                                            <?php if (in_array($employee['proyek'] ?? '', ['CNAF', 'CIMB'])): ?>
+
                                                 <a href="./surat/view_surat_rekening.php?id=<?= e($employee['id_karyawan']) ?>"
                                                     class="action-btn"
                                                     style="background:#007bff; color:white; width: 42px; height: 36px;"
@@ -785,7 +788,7 @@ $conn->close();
                                 <select id="sub_project_cnaf" name="sub_project_cnaf">
                                     <option value="">— Pilih Bagian —</option>
                                     <option value="SPR&BRO">SPR&BRO</option>
-                                    <option value="FORM BEDA TTD">FORM BEDA TTD</option>
+                                
                                     <option value="SBI ZONA B">SBI ZONA B</option>
                                     <option value="SBI ZONA A">SBI ZONA A</option>
                                     <option value="SPR&BRO SENIOR">SPR&BRO SENIOR</option>
@@ -983,7 +986,7 @@ $conn->close();
         // CNAF_SUB_FIELDS tetap spesifik (untuk form Tambah)
         const CNAF_SUB_FIELDS = {
             "SPR&BRO": ["no", "nama_karyawan", "cabang", "nomor_kontrak", "tanggal_pembuatan", "tempat_lahir", "tanggal_lahir", "alamat", "rt_rw", "kelurahan", "kecamatan", "kota_kabupaten", "nik_ktp", "pendidikan_terakhir", "jabatan", "spr_bro", "tanggal_pembuatan_pks", "nama_bm_sm", "nama_tl", "alamat_email", "jenis_kelamin", "level", "nama_ayah", "nama_ibu", "status_karyawan"],
-            "FORM BEDA TTD": ["nama_karyawan", "tempat_lahir", "tanggal_lahir", "alamat", "rt_rw", "kelurahan", "kecamatan", "kota_kabupaten", "nik_ktp", "tanggal_pkm", "jabatan", "nama_sm_cm", "status_karyawan"],
+
             "SBI ZONA A": ["no", "nama_karyawan", "cabang", "nomor_kontrak", "tanggal_pembuatan", "tempat_lahir", "tanggal_lahir", "alamat", "rt_rw", "kelurahan", "kecamatan", "kota_kabupaten", "nik_ktp", "pendidikan_terakhir", "no_hp", "jabatan", "sbi", "tanggal_pembuatan_pks", "tanggal_sign_kontrak", "join_date", "nama_oh", "alamat_email", "jenis_kelamin", "status_karyawan"],
             "SBI ZONA B": ["no", "nama_karyawan", "cabang", "nomor_kontrak", "tanggal_pembuatan", "tempat_lahir", "tanggal_lahir", "alamat", "rt_rw", "kelurahan", "kecamatan", "kota_kabupaten", "nik_ktp", "pendidikan_terakhir", "no_hp", "jabatan", "sbi", "tanggal_pembuatan_pks", "tanggal_sign_kontrak", "join_date", "nama_oh", "alamat_email", "jenis_kelamin", "status_karyawan"],
             "SPR&BRO SENIOR": ["no", "nama_karyawan", "cabang", "nomor_kontrak", "tanggal_pembuatan", "tempat_lahir", "tanggal_lahir", "alamat", "rt_rw", "kelurahan", "kecamatan", "kota_kabupaten", "nik_ktp", "pendidikan_terakhir", "no_hp", "jabatan", "spr_bro", "tanggal_pembuatan_pks", "jabatan_sebelumnya", "nama_bm", "nama_tl", "alamat_email", "jenis_kelamin", "level", "status_karyawan"],

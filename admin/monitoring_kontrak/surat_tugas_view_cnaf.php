@@ -1,4 +1,5 @@
 
+
 <?php
 // ===========================
 // surat_tugas_view_allo.php (KODE FINAL YANG SUDAH DIBERSIHKAN)
@@ -29,7 +30,7 @@ if (!isset($_SESSION['id_karyawan']) || !in_array($_SESSION['role'] ?? '', ['HRD
 $id = (int) ($_GET['id'] ?? 0);
 
 // Ambil data surat + karyawan (karena id_karyawan tidak punya 'email', diganti 'alamat_email')
-$q = $conn->prepare("SELECT st.*, k.nama_karyawan, k.nik_ktp, k.jabatan, k.proyek, k.alamat_email, k.no_hp,
+$q = $conn->prepare("SELECT st.*, k.nama_karyawan, k.nik_ktp, k.jabatan, k.proyek, k.alamat_email, k.no_hp, k.sales_code,
                              k.alamat AS alamat_karyawan
                       FROM surat_tugas st
                       JOIN karyawan k ON k.id_karyawan = st.id_karyawan
@@ -121,46 +122,41 @@ $email_tujuan = $r['alamat_email'] ?? '';
             line-height: 1.5;
         }
 
-        /* KOP (Header) */
-          .kop {
-  display: flex;
-  align-items: center;
-  gap: 8px; /* jarak sangat dekat agar "nempel tapi tetap rapi" */
-  border-bottom: 2px solid #2c3e50;
-  padding-bottom: 12px;
-  margin-bottom: 14px;
+        /* === KOP SURAT BARU === */
+.header-pt {
+    border-bottom: 3px solid #f00;
+    padding-bottom: 10px;
+    margin-bottom: 25px;
+    text-align: center;
 }
 
-.kop .logo {
-  width: 75px;
-  height: auto;
+.kop-wrapper {
+    display: flex;
+    align-items: center;
+    justify-content: center; /* Supaya posisi keseluruhan di tengah */
+    gap: 15px;
 }
 
-.kop-text {
-  display: flex;
-  flex-direction: column;
+.logo-area img {
+    width: 95px;   /* Bisa kamu kecilkan/besarkan sesuai kebutuhan */
+    height: auto;
 }
 
-.kop-title {
-  font-size: 20px;
-  font-weight: 800;
-  line-height: 1.2;
+.text-area {
+    text-align: center; /* Isi teks tetap rata tengah */
+    line-height: 1.3;
 }
 
-.kop-title .m { color: #080808ff; }
-.kop-title .a { color: #111; }
-.kop-title .u { color: #050404ff; }
-
-.kop-alamat {
-  font-size: 13px;
-  color: #444;
-  line-height: 1.4;
-  margin-top: 4px;
+.text-area h1 {
+    margin: ;
+    font-size: 25pt;
+    font-weight: 700;
 }
 
-.kop-alamat a {
-  color: #0056b3;
-  text-decoration: underline;
+.text-area p {
+    margin: 16px 0 0;
+    font-size: 10pt;
+    line-height: 1.3;
 }
 
         /* Judul & Nomor */
@@ -409,19 +405,26 @@ $email_tujuan = $r['alamat_email'] ?? '';
             <div id="emailStatus" style="margin:6px 0 12px; text-align:right; font-weight:600;"></div>
 
             <section class="surat" id="surat-tugas-dokumen">
-                <div class="kop">
-  <img src="../image/manu.png" alt="Logo" class="logo">
-  <div class="kop-text">
-    <div class="kop-title">
-      PT. <span class="m">MANDIRI</span> <span class="a">ANDALAN</span> <span class="u">UTAMA</span>
-    </div>
-    <div class="kop-alamat">
-      Jl. Sultan Iskandar Muda No. 30 A – B Lt. 3, Arteri Pondok Indah<br>
-      Kebayoran Lama Selatan – Jakarta Selatan 12240<br>
-      Telp: (021) 27518306 &nbsp;&nbsp; Web: <a href="http://www.manu.co.id/">http://www.manu.co.id/</a>
-    </div>
-  </div>
+                <div class="header-pt">
+    <div class="kop-wrapper">
+        <div class="logo-area">
+            <img src="../image/manu.png" alt="Logo PT Mandiri Andalan Utama">
         </div>
+        <div class="text-area">
+            <h1>
+                PT.
+                <span style="color: red;">M</span>ANDIRI
+                <span style="color: red;">A</span>NDALA<span style="color: red;">N</span>
+                <span style="color: red;">U</span>TAMA
+            </h1>
+            <p>
+                Jl. Sultan Iskandar Muda No. 30 A – B Lt. 3, Arteri Pondok Indah<br>
+                Kebayoran Lama Selatan - Kebayoran Lama – Jakarta Selatan 12240<br>
+                Telp: (021) 27518306 Web: http://www.manu.co.id/
+            </p>
+        </div>
+    </div>
+</div>
 
                 <div class="judul">SURAT TUGAS</div>
                 <div class="nomor">NO : <?= e($noSurat) ?></div>
@@ -495,27 +498,38 @@ $email_tujuan = $r['alamat_email'] ?? '';
         </main>
     </div>
 
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.9.3/html2pdf.bundle.min.js"></script>
 
     <script>
-        // ... Kode JavaScript untuk download dan email (tetap) ...
         function sendSuratAsEmail() {
             const element = document.getElementById('surat-tugas-dokumen');
             const emailStatus = document.getElementById('emailStatus');
             const btn = document.getElementById('btnSendEmail');
             const original = btn.innerHTML;
+            
+            // Ambil data PHP
+            const idSurat = "<?= e($r['id'] ?? 0) ?>";
+            const emailTujuan = "<?= e($r['alamat_email'] ?? '') ?>"; // Menggunakan alamat_email dari PHP
+            const fileNamePrefix = "<?= e($file_no_surat) ?>";
+
+            if (emailTujuan === '') {
+                 alert('Email karyawan tidak ditemukan di database.');
+                 return;
+            }
 
             if (!confirm("Kirim surat tugas ini ke email karyawan?")) return;
 
             btn.disabled = true;
             btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Mengirim...';
             emailStatus.innerHTML = '';
+            
+            const fileFinalName = `Surat-Tugas-${fileNamePrefix}.pdf`;
 
             const opt = {
                 margin: [5, 5, 5, 5],
-                filename: 'Surat-Tugas.pdf',
+                filename: fileFinalName, // Menggunakan nama file yang sama
                 image: { type: 'jpeg', quality: 0.9 },
                 html2canvas: { scale: 2, useCORS: true },
                 jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
@@ -525,26 +539,27 @@ $email_tujuan = $r['alamat_email'] ?? '';
 
             worker.output('blob').then(function (pdfBlob) {
                 const formData = new FormData();
-                formData.append('surat_pdf', pdfBlob, 'surat_tugas.pdf');
-                formData.append('id_surat', "<?= e($r['id'] ?? 0) ?>");
-                formData.append('email_tujuan', "<?= e($email_tujuan ?: 'unknown@example.com') ?>");
+                formData.append('surat_pdf', pdfBlob, fileFinalName);
+                formData.append('id_surat', idSurat);
+                formData.append('email_tujuan', emailTujuan);
 
                 return fetch('send_surat_email.php', {
                     method: 'POST',
                     body: formData
                 });
             }).then(res => res.text()).then(result => {
+                btn.disabled = false;
+                btn.innerHTML = original;
+
                 if (result && result.toLowerCase().includes('berhasil')) {
                     emailStatus.innerHTML = '<span style="color:#27ae60"><i class="fas fa-check-circle"></i> ' + result + '</span>';
                     btn.style.backgroundColor = '#95a5a6';
                 } else {
-                    emailStatus.innerHTML = '<span style="color:#c0392b"><i class="fas fa-exclamation-triangle"></i> ' + (result || 'Gagal mengirim') + '</span>';
-                    btn.disabled = false;
-                    btn.innerHTML = original;
+                    emailStatus.innerHTML = '<span style="color:#c0392b"><i class="fas fa-exclamation-triangle"></i> ' + (result || 'Gagal mengirim. Cek console error.') + '</span>';
                 }
             }).catch(err => {
-                console.error(err);
-                emailStatus.innerHTML = '<span style="color:#c0392b"><i class="fas fa-times-circle"></i> Terjadi kesalahan.</span>';
+                console.error("Gagal saat memproses PDF atau Jaringan:", err);
+                emailStatus.innerHTML = '<span style="color:#c0392b"><i class="fas fa-times-circle"></i> Terjadi kesalahan fatal.</span>';
                 btn.disabled = false;
                 btn.innerHTML = original;
             });
@@ -554,7 +569,8 @@ $email_tujuan = $r['alamat_email'] ?? '';
             const element = document.getElementById('surat-tugas-dokumen');
             const opt = {
                 margin: [6, 6, 6, 6],
-                filename: Surat-Tugas-${fileNamePrefix}.pdf,
+                // SINTAKS DIPERBAIKI: Menggunakan backticks (`)
+                filename: `Surat-Tugas-${fileNamePrefix}.pdf`, 
                 image: { type: 'jpeg', quality: 0.98 },
                 html2canvas: { scale: 2, useCORS: true },
                 jsPDF: { unit: 'mm', format: [230, 297], orientation: 'portrait' }
