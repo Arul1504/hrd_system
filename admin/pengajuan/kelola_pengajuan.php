@@ -97,7 +97,8 @@ $total_pending = $result_pending_requests->fetch_assoc()['total_pending'] ?? 0;
             font-size: 0.9em;
         }
 
-        th, td {
+        th,
+        td {
             padding: 12px 15px;
             text-align: left;
             border-bottom: 1px solid #ddd;
@@ -123,23 +124,73 @@ $total_pending = $result_pending_requests->fetch_assoc()['total_pending'] ?? 0;
             line-height: 1;
         }
 
-        .approve-btn { background-color: #2ecc71; }
-        .approve-btn:hover { background-color: #27ae60; }
-        .reject-btn { background-color: #e74c3c; }
-        .reject-btn:hover { background-color: #c0392b; }
-        .status-badge { padding: 4px 10px; border-radius: 12px; font-size: 12px; color: #fff; }
-        .status-menunggu { background-color: #f1c40f; }
-        .status-disetujui { background-color: #2ecc71; }
-        .status-ditolak { background-color: #e74c3c; }
-        .download-btn { background-color: #3498db; }
-        .download-btn:hover { background-color: #2980b9; }
-        .detail-btn { background-color: #7f8c8d; }
-        .detail-btn:hover { background-color: #95a5a6; }
-        .badge { background: #ef4444; color: #fff; padding: 2px 8px; border-radius: 999px; font-size: 12px; }
+        .approve-btn {
+            background-color: #2ecc71;
+        }
+
+        .approve-btn:hover {
+            background-color: #27ae60;
+        }
+
+        .reject-btn {
+            background-color: #e74c3c;
+        }
+
+        .reject-btn:hover {
+            background-color: #c0392b;
+        }
+
+        .status-badge {
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 12px;
+            color: #fff;
+        }
+
+        .status-menunggu {
+            background-color: #f1c40f;
+        }
+
+        .status-disetujui {
+            background-color: #2ecc71;
+        }
+
+        .status-ditolak {
+            background-color: #e74c3c;
+        }
+
+        .download-btn {
+            background-color: #3498db;
+        }
+
+        .download-btn:hover {
+            background-color: #2980b9;
+        }
+
+        .detail-btn {
+            background-color: #7f8c8d;
+        }
+
+        .detail-btn:hover {
+            background-color: #95a5a6;
+        }
+
+        .badge {
+            background: #ef4444;
+            color: #fff;
+            padding: 2px 8px;
+            border-radius: 999px;
+            font-size: 12px;
+        }
 
         /* Style untuk Sidebar dan Dropdown (Tidak diubah, hanya memastikan konsistensi) */
-        .sidebar-nav .dropdown-menu { display: none; }
-        .sidebar-nav .dropdown-trigger:hover .dropdown-menu { display: block; }
+        .sidebar-nav .dropdown-menu {
+            display: none;
+        }
+
+        .sidebar-nav .dropdown-trigger:hover .dropdown-menu {
+            display: block;
+        }
     </style>
 </head>
 
@@ -165,18 +216,21 @@ $total_pending = $result_pending_requests->fetch_assoc()['total_pending'] ?? 0;
                         <li><a href="../absensi/absensi.php"><i class="fas fa-edit"></i> Absensi </span></a></li>
                         <li class="dropdown-trigger">
                             <a href="#" class="dropdown-link"><i class="fas fa-users"></i> Data Karyawan <i
-                                        class="fas fa-caret-down"></i></a>
+                                    class="fas fa-caret-down"></i></a>
                             <ul class="dropdown-menu">
                                 <li><a href="../data_karyawan/all_employees.php">Semua Karyawan</a></li>
                                 <li><a href="../data_karyawan/karyawan_nonaktif.php">Non-Aktif</a></li>
                             </ul>
                         </li>
                         <li class="dropdown-trigger">
-                            <a href="#" class="dropdown-link"><i class="fas fa-users"></i> Data Pengajuan <i class="fas fa-caret-down"><span class="badge"><?= $total_pending ?></span></i></a>
+                            <a href="#" class="dropdown-link"><i class="fas fa-users"></i> Data Pengajuan <i
+                                    class="fas fa-caret-down"><span class="badge"><?= $total_pending ?></span></i></a>
                             <ul class="dropdown-menu">
                                 <li><a href="../pengajuan/pengajuan.php">Pengajuan</a></li>
-                                <li><a href="../pengajuan/kelola_pengajuan.php">Kelola Pengajuan<span class="badge"><?= $total_pending ?></span></a></li>
-                                <li><a href="../pengajuan/kelola_reimburse.php">Kelola Reimburse<span class="badge"><?= $total_pending ?></span></a></li>
+                                <li><a href="../pengajuan/kelola_pengajuan.php">Kelola Pengajuan<span
+                                            class="badge"><?= $total_pending ?></span></a></li>
+                                <li><a href="../pengajuan/kelola_reimburse.php">Kelola Reimburse<span
+                                            class="badge"><?= $total_pending ?></span></a></li>
                             </ul>
                         </li>
 
@@ -212,15 +266,16 @@ $total_pending = $result_pending_requests->fetch_assoc()['total_pending'] ?? 0;
                             <th>Jenis</th>
                             <th>Tanggal Pengajuan</th>
                             <th>Mulai - Selesai</th>
+                            <th>Sumber Pengajuan</th>
                             <th>Status</th>
                             <th>Aksi</th>
                         </tr>
                     </thead>
                     <tbody>
                         <?php if ($result_pengajuan->num_rows > 0): ?>
-                            <?php while ($row = $result_pengajuan->fetch_assoc()): 
+                            <?php while ($row = $result_pengajuan->fetch_assoc()):
                                 // Karena Reimburse sudah difilter di SQL, kita hanya memproses Cuti/Izin/Sakit
-                            ?>
+                                ?>
                                 <tr>
                                     <td><?= e($row['id_pengajuan']) ?></td>
                                     <td><?= e($row['nama_karyawan'] ?? $row['nama_pengaju']) ?></td>
@@ -229,6 +284,7 @@ $total_pending = $result_pending_requests->fetch_assoc()['total_pending'] ?? 0;
                                     <td><?= e(date('d M Y', strtotime($row['tanggal_mulai']))) ?> -
                                         <?= e(date('d M Y', strtotime($row['tanggal_berakhir']))) ?>
                                     </td>
+                                     <td><?= e($row['sumber_pengajuan']) ?></td>
                                     <td>
                                         <span class="status-badge status-<?= strtolower($row['status_pengajuan']) ?>">
                                             <?= e($row['status_pengajuan']) ?>
@@ -236,14 +292,19 @@ $total_pending = $result_pending_requests->fetch_assoc()['total_pending'] ?? 0;
                                     </td>
                                     <td>
                                         <?php
-                                        $action_script = 'process_pengajuan.php';
+                                        if (isset($row['sumber_pengajuan']) && $row['sumber_pengajuan'] === 'TANPA_LOGIN') {
+                                            $action_script = 'process_pengajuan_external.php';
+                                        } else {
+                                            $action_script = 'process_pengajuan_cuti.php';
+                                        }
                                         ?>
                                         <div style="display: flex; gap: 5px;">
 
                                             <?php if (!empty($row['dokumen_pendukung'])): ?>
                                                 <a href="../../uploads/<?= e($row['dokumen_pendukung']) ?>"
-                                                    class="action-btn download-btn" title="Unduh Dokumen" download><i
-                                                        class="fas fa-download"></i></a>
+                                                    class="action-btn download-btn" title="Unduh Dokumen" download>
+                                                    <i class="fas fa-download"></i>
+                                                </a>
                                             <?php endif; ?>
 
                                             <?php if ($row['status_pengajuan'] === 'Menunggu'): ?>
@@ -258,11 +319,13 @@ $total_pending = $result_pending_requests->fetch_assoc()['total_pending'] ?? 0;
                                             <?php endif; ?>
                                         </div>
                                     </td>
+
                                 </tr>
                             <?php endwhile; ?>
                         <?php else: ?>
                             <tr>
-                                <td colspan="7" style="text-align:center;">Tidak ada pengajuan Cuti, Izin, atau Sakit yang ditemukan.</td>
+                                <td colspan="7" style="text-align:center;">Tidak ada pengajuan Cuti, Izin, atau Sakit yang
+                                    ditemukan.</td>
                             </tr>
                         <?php endif; ?>
                     </tbody>
@@ -295,15 +358,15 @@ $total_pending = $result_pending_requests->fetch_assoc()['total_pending'] ?? 0;
         <p>Mohon tunggu sebentar, sistem sedang memperbarui status dan mengirim notifikasi.</p>
     </div>
     <script>
-    function showLoadingAndRedirect(url) {
-        document.getElementById('loadingOverlay').style.display = 'flex';
-        setTimeout(function () {
-            window.location.href = url;
-        }, 50);
-    }
+        function showLoadingAndRedirect(url) {
+            document.getElementById('loadingOverlay').style.display = 'flex';
+            setTimeout(function () {
+                window.location.href = url;
+            }, 50);
+        }
 
-    // Fungsi showReimburseDetails tidak diperlukan lagi di halaman ini, tetapi saya biarkan 
-    // struktur script kosong untuk menghindari error jika ada pemanggilan yang tersisa.
+        // Fungsi showReimburseDetails tidak diperlukan lagi di halaman ini, tetapi saya biarkan 
+        // struktur script kosong untuk menghindari error jika ada pemanggilan yang tersisa.
     </script>
 </body>
 

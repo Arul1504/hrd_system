@@ -48,11 +48,15 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
             $file_name = uniqid('lampiran_') . '-' . basename($_FILES['surat-file']['name']);
             $file_path = $upload_dir . $file_name;
             $ext = strtolower(pathinfo($file_path, PATHINFO_EXTENSION));
-            if ($ext !== 'pdf') {
+            
+            // Batasan ukuran file (misalnya 5MB)
+            if ($_FILES['surat-file']['size'] > 5000000) { 
+                 $error = "Ukuran file terlalu besar. Maksimum 5MB.";
+            } else if ($ext !== 'pdf') {
                 $error = "Hanya file PDF yang diizinkan.";
             } else {
                 if (!move_uploaded_file($_FILES['surat-file']['tmp_name'], $file_path)) {
-                    $error = "Gagal mengunggah file.";
+                    $error = "Gagal mengunggah file. Cek izin folder 'uploads'.";
                 } else {
                     $dokumen_pendukung = $file_name;
                 }
@@ -60,22 +64,26 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
         }
 
         if (!$error) {
-            // Insert ke tabel pengajuan
+            // Data Status dan Sumber Pengajuan
             $status_pengajuan = 'Menunggu';
-            $sumber_pengajuan = 'TANPA_LOGIN';
+            $sumber_pengajuan = 'TANPA_LOGIN'; // Nilai yang ingin dimasukkan
 
             // id_karyawan & nik_karyawan dibuat NULL (karena tanpa akun)
+            // KOREKSI: Tambahkan satu tanda tanya '?' untuk $sumber_pengajuan. Total 14 tanda tanya.
             $sql = "INSERT INTO pengajuan
-                    (id_karyawan, nik_karyawan, jenis_pengajuan, tanggal_mulai, tanggal_berakhir, keterangan, dokumen_pendukung,
-                     nama_pengganti, nik_pengganti, wa_pengganti,
-                     status_pengajuan, tanggal_diajukan,
-                     nama_pengaju, nik_pengaju, telepon_pengaju, email_pengaju, sumber_pengajuan)
-                    VALUES (NULL, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), ?, ?, ?, ?, ?)";
+                (id_karyawan, nik_karyawan, jenis_pengajuan, tanggal_mulai, tanggal_berakhir, keterangan, dokumen_pendukung,
+                 nama_pengganti, nik_pengganti, wa_pengganti,
+                 status_pengajuan, tanggal_diajukan,
+                 nama_pengaju, nik_pengaju, telepon_pengaju, email_pengaju, sumber_pengajuan)
+                VALUES (NULL, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), ?, ?, ?, ?, ?)"; 
+                //                                                                 ^
+                //                                                          Tanda tanya ke-14
 
             $stmt = $conn->prepare($sql);
             if (!$stmt) {
-                $error = "Kesalahan server: " . $conn->error;
+                $error = "Kesalahan server saat prepare statement: " . $conn->error;
             } else {
+                // Tipe data harus 14 's' (string) sesuai jumlah '?'
                 $stmt->bind_param(
                     "ssssssssssssss",
                     $jenis_pengajuan, $tanggal_mulai, $tanggal_berakhir, $keterangan, $dokumen_pendukung,
@@ -83,12 +91,13 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
                     $status_pengajuan,
                     $nama_pengaju, $nik_pengaju, $telp_pengaju, $email_pengaju, $sumber_pengajuan
                 );
+                
                 if ($stmt->execute()) {
                     $success = "Pengajuan berhasil dikirim. Anda Akan Mendapatkan Email Untuk Informasi Lebih Lanjut.";
-                    // Kosongkan form
+                    // Kosongkan form setelah sukses
                     $_POST = [];
                 } else {
-                    $error = "Gagal menyimpan: " . $stmt->error;
+                    $error = "Gagal menyimpan data ke database: " . $stmt->error;
                 }
                 $stmt->close();
             }
@@ -319,7 +328,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
                 <div class="form-group">
                     <label>Dokumen Pendukung (opsional)</label>
                     <input type="file" name="surat-file" accept=".pdf">
-                    <div class="muted">Contoh: surat dokter, dll.</div>
+                    <div class="muted">Hanya PDF. Contoh: surat dokter, dll. (Max 5MB)</div>
                 </div>
             </div>
             

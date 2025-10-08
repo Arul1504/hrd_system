@@ -9,9 +9,9 @@ use PHPMailer\PHPMailer\SMTP;
 use PHPMailer\PHPMailer\Exception;
 
 // Jalur relatif ke folder PHPMailer
-require 'PHPMailer/src/Exception.php';
-require 'PHPMailer/src/PHPMailer.php';
-require 'PHPMailer/src/SMTP.php';
+require '../../PHPMailer/src/Exception.php';
+require '../../PHPMailer/src/PHPMailer.php';
+require '../../PHPMailer/src/SMTP.php';
 
 require '../config.php';
 if (session_status() === PHP_SESSION_NONE)

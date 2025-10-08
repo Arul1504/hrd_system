@@ -1,6 +1,6 @@
 <?php
 // ===========================
-// view_invoice.php (FINAL)
+// view_invoice_pei.php (FINAL, header teks tengah + logo kiri, TTD renggang, Direktur Utama -> Direktur)
 // ===========================
 require_once __DIR__ . '/../config.php';
 if (session_status() === PHP_SESSION_NONE) {
@@ -10,7 +10,7 @@ if (session_status() === PHP_SESSION_NONE) {
 function invoice_logo_data_uri(): string {
     $path = realpath(__DIR__ . '/../image/manu.png');
     if (!$path || !is_readable($path)) return '';
-    $data = base64_encode(file_get_contents($path));
+    $data = base64_encode(@file_get_contents($path));
     return 'data:image/png;base64,' . $data;
 }
 $LOGO_SRC = invoice_logo_data_uri();
@@ -36,7 +36,7 @@ $invoice = $stmt->get_result()->fetch_assoc();
 $stmt->close();
 if (!$invoice) exit('Invoice tidak ditemukan');
 
-// Data dummy/fallback
+// Nilai tampil
 $invoice_date_formated = date('d F Y', strtotime($invoice['invoice_date'] ?? 'now'));
 $invoice_number        = $invoice['invoice_number'] ?? 'XXX/MANU-PEI/KEU-AR/VIII/2025';
 $billing_period_start  = $invoice['billing_period_start'] ?? 'Agustus 2025';
@@ -49,7 +49,7 @@ $stmt->execute();
 $items = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
 $stmt->close();
 
-// Hitungan dummy
+// Hitungan (boleh kosong kalau kolom tidak ada; gunakan fallback agar selalu tampil)
 $jumlah_setelah_fee = $invoice['jumlah_setelah_fee'] ?? 47960095;
 $ppn_11_fee         = $invoice['ppn_11_fee'] ?? 396159;
 $total_tagihan      = $invoice['total_tagihan'] ?? 48356254;
@@ -59,8 +59,8 @@ $terbilang          = $invoice['terbilang'] ?? 'Empat Puluh Delapan Juta Dua Rat
 
 // Sidebar data
 $id_karyawan_admin = $_SESSION['id_karyawan'];
-$nama_user_admin   = $_SESSION['nama'];
-$role_user_admin   = $_SESSION['role'];
+$nama_user_admin   = $_SESSION['nama'] ?? '';
+$role_user_admin   = $_SESSION['role'] ?? '';
 
 $sql_pending_requests = "SELECT COUNT(*) AS total_pending FROM pengajuan WHERE status_pengajuan = 'Menunggu'";
 $result_pending_requests = $conn->query($sql_pending_requests);
@@ -103,304 +103,66 @@ function rupiah_int($n) { return number_format((float)$n, 0, ',', '.'); }
   }
   </script>
 
-   <style>
-        /* jangan sentuh sidebar; fokus di dalam .invoice-canvas saja */
-        .invoice-canvas {
-            max-width: 900px;
-            /* Ukuran mendekati A4 landscape/lebar */
-            margin: 0 auto;
-        }
+  <style>
+    /* Hanya styling area invoice */
+    .invoice-canvas { max-width: 900px; margin: 0 auto; }
+    .paper {
+      background:#fff; padding:30px 40px; border-radius:0; box-shadow:none;
+      font-size:11pt; color:#000;
+    }
 
-        .paper {
-            background: #fff;
-            padding: 30px 40px;
-            /* Padding lebih besar untuk area kertas */
-            border-radius: 0;
-            /* Hilangkan border radius */
-            box-shadow: none;
-            /* Hilangkan shadow */
+    /* Header: logo kiri, teks tengah */
+    .brand {
+      display:grid; grid-template-columns:auto 1fr; align-items:center; column-gap:14px;
+      border-bottom:none; padding-bottom:0; margin-bottom:0;
+    }
+    .brand img { height:50px; margin-top:10px; grid-column:1; }
+    .brand .brand-text { grid-column:2; text-align:center; line-height:1.25; padding-top:8px; }
+    .brand h1 { margin:0; color:#000; font-size:14pt; font-weight:700; text-transform:uppercase; }
+    .brand p { margin:0; font-size:9pt; color:#000; }
+    .brand .muted { font-style:normal; }
 
-            font-size: 11pt;
-            color: #000;
-        }
+    .kwitansi-title {
+      text-align:center; font-size:20pt; font-weight:900; margin:40px 0 20px 0; clear:both;
+    }
 
-        /* Hilangkan elemen header/logo yang ada di file HTML awal, dan ganti dengan layout gambar */
-        .brand {
-            display: flex;
-            gap: 12px;
-            align-items: flex-start;
-            /* Logo di atas, teks di bawah */
-            border-bottom: none;
-            padding-bottom: 0;
-            margin-bottom: 0;
-            width: 50%;
-            float: left;
-        }
+    .head-section { display:flex; justify-content:space-between; gap:20px; margin-bottom:20px; }
+    .billto { width:55%; font-size:10pt; line-height:1.4; }
+    .billto .kepada-yth { font-weight:700; margin-bottom:8px; }
 
-        .brand img {
-            height: 50px;
-            margin-top: 10px;
-        }
+    .info-box { width:40%; border:1px solid #000; padding:8px; font-size:10pt; }
+    .info-row { display:flex; line-height:1.4; }
+    .info-row strong { width:auto; margin-right:6px; }
 
-        .brand-text {
-            line-height: 1.2;
-            padding-top: 10px;
-        }
+    .items-table { width:100%; border-collapse:collapse; margin-top:15px; font-size:10pt; }
+    .items-table th, .items-table td { border:1px solid #000; padding:4px 8px; background:#fff; vertical-align:top; }
+    .items-table th { background:#fff; font-weight:700; text-align:center; }
+    .items-table .amount-col { text-align:right; }
+    .items-table .row-total td { font-weight:700; }
+    .items-table .row-grand-total td { background:#f0f0f0; }
 
-        .brand h1 {
-            margin: 0;
-            color: #000;
-            /* Warna hitam */
-            font-size: 14pt;
-            font-weight: bold;
-            text-transform: uppercase;
-        }
+    .terbilang-box { border:1px solid #000; padding:8px; margin-top:15px; font-weight:700; font-size:10pt; }
+    .terbilang-box i { font-weight:400; }
 
-        .brand p {
-            margin: 0;
-            font-size: 9pt;
-            /* Ukuran font lebih kecil */
-            color: #000;
-        }
+    /* TTD direnggangkan supaya muat materai */
+    .signature-section { display:flex; justify-content:flex-end; margin-top:42px; font-size:10pt; }
+    .signature-box { width:300px; text-align:center; position:relative; min-height:185px; }
+    .signature-box p { margin:0; line-height:1.4; position:relative; z-index:2; }
+    .signature-box .date { text-align:right; font-size:10pt; margin-bottom:8px; }
+    .signature-stamp { position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); width:150px; height:auto; opacity:.8; z-index:1; }
+    .signature-name { font-weight:700; border-bottom:1px solid #000; display:inline-block; padding:0 30px; margin-top:105px; line-height:1.2; }
+    .signature-title { margin-top:10px; font-style:italic; }
 
-        .brand .muted {
-            font-style: normal;
-        }
+    /* Versi ttd blok yang sudah ada di HTML: betulkan kurung & spacing */
+    .ttd { float:right; width:300px; text-align:center; margin-top:42px; }
+    .y-membuat { margin-bottom:12px; font-weight:600; }
+    .ttd-area img { max-width:150px; height:auto; }
+    .nama { font-weight:700; border-bottom:1px solid #000; display:inline-block; padding:0 30px; margin-top:100px; line-height:1.2; }
+    .jab { margin-top:10px; font-size:0.95em; }
 
-        /* Hapus italic */
-
-        /* Judul Kwitansi */
-        .kwitansi-title {
-            text-align: center;
-            font-size: 20pt;
-            font-weight: 900;
-            margin: 40px 0 20px 0;
-            clear: both;
-            /* Pastikan di bawah header PT */
-        }
-
-        /* Bagian Kepada Yth. */
-        .head-section {
-            display: flex;
-            justify-content: space-between;
-            margin-bottom: 20px;
-        }
-
-        .billto {
-            width: 55%;
-            font-size: 10pt;
-            line-height: 1.4;
-        }
-
-        .billto strong {
-            font-weight: bold;
-        }
-
-        .billto .label {
-            font-weight: bold;
-        }
-
-        .billto address-line {
-            display: block;
-        }
-
-        .kepada-yth {
-            font-weight: bold;
-            margin-bottom: 8px;
-        }
-
-        /* Bagian Tanggal, Nomor, Periode */
-        .info-box {
-            width: 40%;
-            border: 1px solid #000;
-            padding: 8px;
-            font-size: 10pt;
-        }
-
-        .info-row {
-            display: flex;
-            line-height: 1.4;
-        }
-
-        .info-label {
-            width: 120px;
-            font-weight: bold;
-        }
-
-        .info-value {
-            flex-grow: 1;
-        }
-
-        /* Tabel Tagihan */
-        .items-table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 15px;
-            font-size: 10pt;
-        }
-
-        .items-table th,
-        .items-table td {
-            border: 1px solid #000;
-            padding: 4px 8px;
-            /* Padding lebih kecil */
-            background: #fff;
-            vertical-align: top;
-        }
-
-        .items-table th {
-            background: #fff;
-            font-weight: bold;
-            text-align: center;
-        }
-
-        .items-table .amount-col {
-            text-align: right;
-        }
-
-        .items-table .row-total td {
-            font-weight: bold;
-        }
-
-        .items-table .row-grand-total td {
-            background: #f0f0f0;
-        }
-
-        /* Untuk membedakan baris grand total */
-
-        .kolom-keterangan {
-            text-align: left;
-            width: 60%;
-        }
-
-        .kolom-jumlah {
-            text-align: left;
-            width: 40%;
-        }
-
-        /* Kolom jumlah tagihan disatukan */
-
-        /* Terbilang */
-        .terbilang-box {
-            border: 1px solid #000;
-            padding: 8px;
-            margin-top: 15px;
-            font-weight: bold;
-            font-size: 10pt;
-        }
-
-        .terbilang-label {
-            margin-bottom: 5px;
-        }
-
-        .terbilang-value {
-            font-style: italic;
-        }
-
-        /* Tanda Tangan */
-        .signature-section {
-            display: flex;
-            justify-content: flex-end;
-            margin-top: 40px;
-            font-size: 10pt;
-        }
-
-        .signature-box {
-            width: 300px;
-            text-align: center;
-            position: relative;
-            /* Penting untuk menampung stempel absolut */
-        }
-
-        .signature-box p {
-            margin: 0;
-            line-height: 1.4;
-            position: relative;
-            /* Agar teks berada di atas stempel */
-            z-index: 2;
-            /* Agar teks berada di atas stempel */
-        }
-
-        .signature-box .date {
-            text-align: right;
-            font-size: 10pt;
-            margin-bottom: 5px;
-            /* Kurangi jarak vertikal di sini */
-        }
-
-        .signature-stamp {
-            position: absolute;
-            top: 50%;
-            /* Posisikan stempel di tengah vertikal box */
-            left: 50%;
-            transform: translate(-50%, -50%);
-            /* Geser agar benar-benar di tengah */
-            width: 150px;
-            /* Sesuaikan ukuran stamp */
-            height: auto;
-            opacity: 0.8;
-            z-index: 1;
-            /* Penting! Agar stempel berada di BElAKANG teks */
-        }
-
-        .signature-name {
-            font-weight: bold;
-            border-bottom: 1px solid #000;
-            display: inline-block;
-            padding: 0 30px;
-            margin-top: 100px;
-            /* Jarak KOSONG untuk tanda tangan & stempel */
-            line-height: 1.2;
-        }
-
-        .signature-title {
-            font-style: italic;
-            margin-top: 90px;
-            /* Jarak sangat dekat di bawah garis */
-        }
-
-        /* Cegah style global admin merusak layout invoice */
-        .paper,
-        .paper * {
-            word-break: normal !important;
-            overflow-wrap: break-word !important;
-            border-radius: 0 !important;
-            box-shadow: none !important;
-        }
-
-       .ttd {
-    float: right; /* Pindahkan seluruh div ke kanan */
-    width: 250px; /* Beri lebar agar konten di dalamnya mudah diatur */
-    text-align: center; /* Pusatkan teks (Hormat Kami, nama, jabatan) */
-    margin-top: 20px; /* Beri sedikit jarak dari konten di atasnya */
-}
-
-/* 2. Style untuk 'Hormat Kami' */
-.y-membuat {
-    margin-bottom: 20px; /* Beri jarak yang besar ke area tanda tangan */
-}
-
-/* 3. Style untuk area gambar TTD (opsional, jika ingin mengontrol ukuran gambar) */
-.ttd-area img {
-    max-width: 150px; /* Sesuaikan lebar gambar tanda tangan */
-    height: auto;
-   
-
-/* 4. Style untuk Nama (memberi garis bawah dan jarak) */
-.nama {
-    font-weight: bold;
-    border-bottom: 1px solid #000; /* Garis horizontal */
-    display: inline-block; /* Agar border-bottom hanya selebar teks */
-    padding: 0 10px; /* Padding samping agar garis lebih panjang dari teks */
-    margin-top: 5px; /* Sesuaikan jika Anda menggunakan 'position: absolute' untuk gambar */
-}
-
-/* 5. Style untuk Jabatan */
-.jab {
-    margin-top: 5px; /* Jarak kecil di bawah nama */
-    font-size: 0.9em;
-}
-    </style>
+    /* Cegah style global admin merusak layout invoice */
+    .paper, .paper * { word-break:normal !important; overflow-wrap:break-word !important; border-radius:0 !important; box-shadow:none !important; }
+  </style>
 </head>
 
 <body>
@@ -451,6 +213,7 @@ function rupiah_int($n) { return number_format((float)$n, 0, ',', '.'); }
     <!-- Area yang diexport PDF -->
     <div class="invoice-canvas" id="surat-tugas-dokumen">
       <div class="paper">
+        <!-- Header: logo kiri, teks tengah -->
         <div class="brand">
           <img src="<?= $LOGO_SRC ?>" alt="Logo">
           <div class="brand-text">
@@ -460,7 +223,7 @@ function rupiah_int($n) { return number_format((float)$n, 0, ',', '.'); }
             <p>Web: <span style="color:#0000ff;text-decoration:underline;">http://www.manu.co.id/</span></p>
           </div>
         </div>
-        <br><br><br><br>
+
         <p class="kwitansi-title">KWITANSI</p>
 
         <div class="head-section">
@@ -487,14 +250,42 @@ function rupiah_int($n) { return number_format((float)$n, 0, ',', '.'); }
             <tr><th>No.</th><th>Keterangan Tagihan</th><th>Jumlah Tagihan</th></tr>
           </thead>
           <tbody>
-            <tr><td style="text-align:center">1</td><td><?= e($items[0]['description'] ?? 'Biaya Gaji Karyawan Outsource') ?></td><td></td></tr>
-            <tr class="row-total"><td colspan="2" style="text-align:right;">TOTAL</td><td class="amount-col">Rp <?= rupiah_int($items[0]['amount'] ?? 44340465) ?></td></tr>
-            <tr><td style="text-align:center">2</td><td><?= e($items[1]['description'] ?? 'Fee Management') ?></td><td></td></tr>
-            <tr class="row-total"><td colspan="2" style="text-align:right;">JUMLAH</td><td class="amount-col">Rp <?= rupiah_int($jumlah_setelah_fee) ?></td></tr>
-            <tr><td style="text-align:center">3</td><td>PPN 11 % Fee</td><td class="amount-col">Rp <?= rupiah_int($ppn_11_fee) ?></td></tr>
-            <tr class="row-total"><td colspan="2" style="text-align:right;">TOTAL TAGIHAN</td><td class="amount-col">Rp <?= rupiah_int($total_tagihan) ?></td></tr>
-            <tr><td style="text-align:center">4</td><td>PPH 23 (2 % dari Fee)</td><td class="amount-col">Rp <?= rupiah_int($pph_2_fee) ?></td></tr>
-            <tr class="row-total" style="background:#f3f4f6;"><td colspan="2" style="text-align:right;">TOTAL PAYMENT PEI</td><td class="amount-col">Rp <?= rupiah_int($total_payment_pei) ?></td></tr>
+            <tr>
+              <td style="text-align:center">1</td>
+              <td><?= e($items[0]['description'] ?? 'Biaya Gaji Karyawan Outsource') ?></td>
+              <td></td>
+            </tr>
+            <tr class="row-total">
+              <td colspan="2" style="text-align:right;">TOTAL</td>
+              <td class="amount-col">Rp <?= rupiah_int($items[0]['amount'] ?? 44340465) ?></td>
+            </tr>
+            <tr>
+              <td style="text-align:center">2</td>
+              <td><?= e($items[1]['description'] ?? 'Fee Management') ?></td>
+              <td></td>
+            </tr>
+            <tr class="row-total">
+              <td colspan="2" style="text-align:right;">JUMLAH</td>
+              <td class="amount-col">Rp <?= rupiah_int($jumlah_setelah_fee) ?></td>
+            </tr>
+            <tr>
+              <td style="text-align:center">3</td>
+              <td>PPN 11 % Fee</td>
+              <td class="amount-col">Rp <?= rupiah_int($ppn_11_fee) ?></td>
+            </tr>
+            <tr class="row-total">
+              <td colspan="2" style="text-align:right;">TOTAL TAGIHAN</td>
+              <td class="amount-col">Rp <?= rupiah_int($total_tagihan) ?></td>
+            </tr>
+            <tr>
+              <td style="text-align:center">4</td>
+              <td>PPH 23 (2 % dari Fee)</td>
+              <td class="amount-col">Rp <?= rupiah_int($pph_2_fee) ?></td>
+            </tr>
+            <tr class="row-total row-grand-total">
+              <td colspan="2" style="text-align:right;">TOTAL PAYMENT PEI</td>
+              <td class="amount-col">Rp <?= rupiah_int($total_payment_pei) ?></td>
+            </tr>
           </tbody>
         </table>
 
@@ -503,11 +294,18 @@ function rupiah_int($n) { return number_format((float)$n, 0, ',', '.'); }
           <p><i><?= e(ucwords(strtolower($terbilang))) ?></i></p>
         </div>
 
+        <!-- TTD versi blok eksisting: lebih renggang & gelar otomatis Direktur -->
         <div class="ttd">
           <div class="y-membuat">Hormat Kami</div>
           <div class="ttd-area"><img src="../image/ttd.png" alt="Tanda Tangan"></div>
           <div class="nama"><?= e($invoice['manu_signatory_name'] ?? 'Oktafian Farhan') ?></div>
-          <div class="jab">Direktur Utama</div>
+          <div class="jab">
+            <?php
+              $t = trim((string)($invoice['manu_signatory_title'] ?? 'Direktur'));
+              if (strcasecmp($t, 'Direktur Utama') === 0) { $t = 'Direktur'; }
+              echo e($t);
+            ?>
+          </div>
         </div>
 
       </div>

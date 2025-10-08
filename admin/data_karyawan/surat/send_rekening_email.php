@@ -11,9 +11,9 @@ use PHPMailer\PHPMailer\Exception;
 
 // Sesuaikan path PHPMailer dengan struktur folder Anda
 // Asumsi: folder PHPMailer berada di root atau di path yang dapat diakses
-require '../PHPMailer/src/Exception.php'; 
-require '../PHPMailer/src/PHPMailer.php';
-require '../PHPMailer/src/SMTP.php';
+require '../../../PHPMailer/src/Exception.php'; 
+require '../../../PHPMailer/src/PHPMailer.php';
+require '../../../PHPMailer/src/SMTP.php';
 
 require '../../config.php'; // Koneksi ke database
 if (session_status() === PHP_SESSION_NONE)

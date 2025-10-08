@@ -1,5 +1,5 @@
 <?php 
-// ============= invoice.php (Show-on-select + Tema + CNAF Nota Debet + Management Fee + Status Button) =============
+// ============= invoice.php (Show-on-select + Tema + CNAF Nota Debet + Management Fee + Status Project + Fix UI) =============
 
 require_once __DIR__ . '/../config.php';
 if (session_status() === PHP_SESSION_NONE) {
@@ -107,22 +107,25 @@ if ($result_descriptions && $result_descriptions->num_rows > 0) {
         }
     }
 }
-$projects_json = json_encode($projects);
+$projects_json = json_encode($projects, JSON_UNESCAPED_UNICODE);
 
 // List table
 $search_query = $_GET['search'] ?? '';
+
 $sql_all_invoices = "SELECT 
-            i.id_invoice AS id_invoice,
-            i.invoice_number,
-            i.invoice_date,
-            i.bill_to_bank,
-            i.grand_total,
-            i.status_pembayaran,
-            i.person_up_name,
-            COALESCE(p.project_code, i.project_key) AS project_code
-        FROM invoices i
-        LEFT JOIN projects p ON p.project_code = i.project_key
-        ORDER BY i.id_invoice DESC";
+    i.id_invoice AS id_invoice,
+    i.invoice_number,
+    i.invoice_date,
+    i.bill_to_bank,
+    i.grand_total,
+    i.status_pembayaran,
+    i.person_up_name,
+    i.employee_status AS status_project,
+    COALESCE(p.project_code, i.project_key) AS project_code
+FROM invoices i
+LEFT JOIN projects p ON p.project_code = i.project_key
+ORDER BY i.id_invoice DESC";
+
 $result = $conn->query($sql_all_invoices);
 $all_invoices = [];
 if ($result && $result->num_rows > 0) { while ($row = $result->fetch_assoc()) $all_invoices[] = $row; }
@@ -146,112 +149,48 @@ if (!empty($search_query)) {
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
     <style>
-        .theme-badge { display:inline-block;padding:4px 10px;border-radius:999px;font-size:12px;font-weight:600;margin-left:10px; }
-        .theme-mitra .header-section { background:#ffe2ef; }
-        .theme-mitra .theme-badge   { background:#ff6fa3;color:#fff; }
-        .theme-pkwt  .header-section { background:#e2efff; }
-        .theme-pkwt  .theme-badge   { background:#3b82f6;color:#fff; }
+        /* tetap: sembunyikan badge status di judul modal */
+        .theme-badge{display:none!important}
 
-        .notadebet-row { display:none; margin-top:6px; }
-        select:disabled { background:#f2f2f2; cursor:not-allowed; }
+        /* utilitas form */
+        .notadebet-row{display:none;margin-top:6px}
+        select:disabled{background:#f2f2f2;cursor:not-allowed}
+        .hidden{display:none!important}
+        .percent-items table{width:100%;border-collapse:collapse;margin:8px 0}
+        .percent-items th,.percent-items td{padding:8px;border-top:1px solid #eee}
+        .percent-items .remove-btn{background:#e74c3c;color:#fff;border:none;padding:6px 10px;border-radius:6px;cursor:pointer}
+        .add-percent-btn{background:#0d6efd;color:#fff;border:none;padding:6px 10px;border-radius:6px;cursor:pointer}
+        .text-right{text-align:right}
+        .muted{color:#777;font-size:12px}
 
-        .hidden { display:none !important; }
-        .percent-items table { width:100%; border-collapse:collapse; margin:8px 0; }
-        .percent-items th, .percent-items td { padding:8px; border-top:1px solid #eee; }
-        .percent-items .remove-btn { background:#e74c3c;color:#fff;border:none;padding:6px 10px;border-radius:6px;cursor:pointer;}
-        .add-percent-btn { background:#0d6efd;color:#fff;border:none;padding:6px 10px;border-radius:6px;cursor:pointer;}
-        .text-right { text-align:right; }
-        .muted { color:#777; font-size:12px; }
+        /* tabel daftar invoice (header biru pastel lembut) */
+        .invoice-table{width:100%;border-collapse:collapse;table-layout:fixed}
+        .invoice-table thead th{background:#E6F0FF;color:#1E3A8A;border-bottom:2px solid #DBEAFE}
+        .invoice-table th,.invoice-table td{padding:12px 14px;border-bottom:1px solid #e5e7eb;vertical-align:middle;background:#fff}
+        /* kolom aksi */
+        .invoice-table th:nth-child(7),.invoice-table td:nth-child(7){width:170px}
 
-        /* Badge status pembayaran */
-        .status-label { padding:4px 8px; border-radius:999px; font-weight:600; font-size:12px; }
-        .belumbayar { background:#fee2e2; color:#b91c1c; }  /* merah muda */
-        .proses     { background:#fff7ed; color:#c2410c; }  /* oranye muda */
-        .selesai    { background:#dcfce7; color:#166534; }  /* hijau muda */
-
-        /* --- Aksi tombol di tabel invoice --- */
-        .action-buttons{
-        display:flex;
-        gap:8px;
-        align-items:center;
-        }
+        /* tombol aksi – SATU definisi saja (hindari dobel) */
+        .action-buttons{display:flex;gap:8px;align-items:center}
+        .action-buttons form{margin:0}
         .action-buttons .action-btn{
-        display:inline-flex;
-        align-items:center;
-        justify-content:center;
-        width:38px;          /* ukuran konsisten */
-        height:38px;
-        border-radius:8px;
-        border:0;
-        text-decoration:none;
-        color:#fff;
-        line-height:1;
-        font-size:14px;      /* ukuran ikon */
-        cursor:pointer;
+            display:inline-flex;align-items:center;justify-content:center;
+            width:38px;height:38px;border-radius:8px;border:0;color:#fff;line-height:1;font-size:14px;cursor:pointer;
         }
+        /* mata: tetap biru */
+        .action-buttons .view-btn{background:#0EA5E9}
 
-        /* Warna tombol */
-        .action-buttons .view-btn{    background:#0ea5e9; }  /* biru */
-        .action-buttons .approve-btn{ background:#10b981; }  /* hijau */
-        .action-buttons .delete-btn{  background:#e74c3c; }  /* merah */
-
-        /* Hilangkan margin default form agar sejajar */
-        .action-buttons form{ margin:0; }
-
-        /* Tabel rapi, garis lurus */
-                .invoice-table{
-                width:100%;
-                border-collapse:collapse;
-                table-layout:fixed;
-                }
-                .invoice-table th,
-                .invoice-table td{
-                padding:12px 14px;
-                border-bottom:1px solid #e5e7eb;  /* garis antar baris */
-                vertical-align:middle;
-                background:#fff;
-                }
-                .invoice-table thead th{
-                border-bottom:2px solid #e5e7eb;
-                }
-
-                /* Kolom aksi (opsional) */
-                .invoice-table th:nth-child(6),
-                .invoice-table td:nth-child(6){
-                width:170px; /* sesuaikan */
-                }
-
-                /* Container tombol di dalam TD */
-                .action-buttons{
-                display:flex;
-                gap:8px;
-                align-items:center;
-                }
-
-                /* Tombol ikon seragam */
-                .action-btn{
-                display:inline-flex;
-                align-items:center;
-                justify-content:center;
-                width:38px;
-                height:38px;
-                border-radius:8px;
-                border:0;
-                text-decoration:none;
-                color:#fff;
-                line-height:1;
-                font-size:14px;
-                cursor:pointer;
-                }
-                .view-btn{    background:#0ea5e9; }
-                .approve-btn{ background:#10b981; }
-                .delete-btn{  background:#e74c3c; }
-
-                /* Hilangkan margin default form */
-                .action-buttons form{ margin:0; }
-
-
+        /* >>> permintaanmu: warna centang & hapus */
+        .action-buttons .approve-btn{background:#10B981} /* hijau */
+        .action-buttons .delete-btn{background:#EF4444}  /* merah */
+        .action-buttons .approve-btn i,
+        .action-buttons .delete-btn i{color:#fff}
+        .action-buttons .approve-btn:hover,
+        .action-buttons .delete-btn:hover{filter:brightness(.95)}
+        .action-buttons .approve-btn:active,
+        .action-buttons .delete-btn:active{transform:translateY(1px)}
     </style>
+
 </head>
 <body>
     <div class="container">
@@ -323,7 +262,7 @@ if (!empty($search_query)) {
                 <div class="search-filter-container">
                     <form action="invoice.php" method="GET" class="search-form">
                         <div class="search-box">
-                            <input type="text" name="search" placeholder="Cari No. Invoice atau Nama..." value="<?= e($search_query) ?>">
+                            <input type="text" name="search" placeholder="Cari Nomor Invoice..." value="<?= e($search_query) ?>">
                             <button type="submit"><i class="fas fa-search"></i></button>
                         </div>
                     </form>
@@ -342,7 +281,8 @@ if (!empty($search_query)) {
                         <tr>
                             <th>Nomor Invoice</th>
                             <th>Tanggal</th>
-                            <th>Untuk Project</th>
+                            <th>Project</th>
+                            <th>Status Project</th>
                             <th>Total</th>
                             <th>Status</th>
                             <th>Aksi</th>
@@ -350,12 +290,13 @@ if (!empty($search_query)) {
                     </thead>
                     <tbody>
                         <?php if (empty($invoices)): ?>
-                            <tr><td id="no-data-invoice" colspan="6" style="text-align:center;">Tidak ada data invoice yang ditemukan.</td></tr>
+                            <tr><td id="no-data-invoice" colspan="7" style="text-align:center;">Tidak ada data invoice yang ditemukan.</td></tr>
                         <?php else: foreach ($invoices as $invoice): ?>
                             <tr>
                                 <td><?= e($invoice['invoice_number']) ?></td>
                                 <td><?= e(date('d F Y', strtotime($invoice['invoice_date']))) ?></td>
                                 <td><?= e($invoice['project_code'] ?? '') ?></td>
+                                <td><?= e($invoice['status_project'] ?? '') ?></td>
                                 <td>Rp <?= number_format((float)$invoice['grand_total'], 0, ',', '.') ?></td>
                                 <td>
                                     <?php $status_class = strtolower(str_replace(' ', '', $invoice['status_pembayaran'])); ?>
@@ -364,14 +305,16 @@ if (!empty($search_query)) {
                                 <td>
                                 <div class="action-buttons">
                                     <?php
-// Tentukan URL berdasarkan nilai project
-$view_file = ($invoice['project_code'] === 'PEI') ? 'view_invoice_pei.php' : 'view_invoice.php';
-$invoice_id = (int)$invoice['id_invoice'];
-?>
-
-<a class="action-btn view-btn" href="<?= $view_file ?>?id=<?= $invoice_id ?>" title="Lihat">
-    <i class="fas fa-eye"></i>
-</a>
+                                    // Tentukan URL berdasarkan project/status project (PKWT/PEI -> view khusus)
+                                    $view_file = (
+                                        (isset($invoice['status_project']) && strtoupper($invoice['status_project']) === 'PKWT') ||
+                                        (isset($invoice['project_code']) && strtoupper($invoice['project_code']) === 'PEI')
+                                    ) ? 'view_invoice_pei.php' : 'view_invoice.php';
+                                    $invoice_id = (int)$invoice['id_invoice'];
+                                    ?>
+                                    <a class="action-btn view-btn" href="<?= e($view_file) ?>?id=<?= $invoice_id ?>" title="Lihat">
+                                        <i class="fas fa-eye"></i>
+                                    </a>
 
                                     <?php if (strcasecmp($invoice['status_pembayaran'], 'Sudah Dibayar') !== 0): ?>
                                     <form action="update_invoice_status.php" method="POST">
@@ -379,17 +322,17 @@ $invoice_id = (int)$invoice['id_invoice'];
                                         <input type="hidden" name="id" value="<?= (int)$invoice['id_invoice'] ?>">
                                         <input type="hidden" name="status_pembayaran" value="Sudah Dibayar">
                                         <button type="submit" class="action-btn approve-btn" title="Tandai Sudah Dibayar">
-                                        <i class="fas fa-check"></i>
+                                            <i class="fas fa-check"></i>
                                         </button>
                                     </form>
                                     <?php endif; ?>
 
                                     <form action="delete_invoice.php" method="POST" onsubmit="return confirm('Hapus invoice ini? Tindakan tidak bisa dibatalkan.');">
-                                    <input type="hidden" name="id" value="<?= (int)$invoice['id_invoice'] ?>">
-                                    <input type="hidden" name="csrf_token" value="<?= e($csrf_token) ?>">
-                                    <button type="submit" class="action-btn delete-btn" title="Hapus">
-                                        <i class="fas fa-trash"></i>
-                                    </button>
+                                        <input type="hidden" name="id" value="<?= (int)$invoice['id_invoice'] ?>">
+                                        <input type="hidden" name="csrf_token" value="<?= e($csrf_token) ?>">
+                                        <button type="submit" class="action-btn delete-btn" title="Hapus">
+                                            <i class="fas fa-trash"></i>
+                                        </button>
                                     </form>
                                 </div>
                                 </td>
@@ -401,7 +344,7 @@ $invoice_id = (int)$invoice['id_invoice'];
         </main>
     </div>
 
-    <!-- ================= Modal Buat Invoice (tetap versi kamu) ================= -->
+    <!-- ================= Modal Buat Invoice ================= -->
     <div id="invoiceModal" class="modal">
         <div class="modal-content">
             <div class="modal-header">
@@ -427,7 +370,7 @@ $invoice_id = (int)$invoice['id_invoice'];
                         <div class="bill-to-section">
                             <div class="bill-to-info">
                                 <p style="margin-bottom:10px;">
-                                    <strong>Status Karyawan :</strong>
+                                    <strong>Status Project :</strong>
                                     <select id="status-select" name="status_karyawan" required>
                                         <option value="" selected disabled>-- Pilih Status --</option>
                                         <option value="MITRA">MITRA</option>
@@ -510,13 +453,11 @@ $invoice_id = (int)$invoice['id_invoice'];
                             <div class="summary-section">
                                 <table>
                                     <tbody>
-                                        <!-- Management Fee DI ATAS SUB TOTAL -->
                                         <tr id="row-management-fee">
                                             <td class="text-right"><strong>MANAGEMENT FEE (<input type="number" name="management_fee_percentage" id="management-fee-percentage-input" value="0" step="0.1" style="width:50px;text-align:right;" oninput="calculateTotals()">%)</strong></td>
                                             <td class="text-right"><span id="management-fee-amount-display">Rp 0</span><input type="hidden" name="management_fee_amount" id="management-fee-amount-input"></td>
                                         </tr>
 
-                                        <!-- SUB TOTAL = jumlah Description + Management Fee -->
                                         <tr id="row-subtotal">
                                             <td class="text-right"><strong>SUB TOTAL</strong></td>
                                             <td class="text-right"><span id="sub-total-display">Rp 0</span><input type="hidden" name="sub_total" id="sub-total-input"></td>
@@ -531,7 +472,6 @@ $invoice_id = (int)$invoice['id_invoice'];
                                             <td class="text-right"><span id="pph-amount-display">Rp 0</span><input type="hidden" name="pph_amount" id="pph-amount-input"></td>
                                         </tr>
 
-                                        <!-- Nama Penyesuaian (%) di bawah PPH -->
                                         <tr>
                                             <td colspan="2">
                                                 <div class="percent-items">
@@ -580,7 +520,7 @@ $invoice_id = (int)$invoice['id_invoice'];
                                             <input type="text" name="manu_signatory_name" value="Oktafian Farhan" style="border:none;text-align:left;width:auto;padding:0;">
                                         </p>
                                         <p class="signatory-title" style="margin:5px 0 0 0;font-size:12px;color:#777;">
-                                            <input type="text" name="manu_signatory_title" value="Direktur Utama" style="border:none;text-align:left;width:auto;padding:0;">
+                                            <input type="text" name="manu_signatory_title" value="Direktur" style="border:none;text-align:left;width:auto;padding:0;">
                                         </p>
                                     </div>
                                 </div>
@@ -699,7 +639,6 @@ $invoice_id = (int)$invoice['id_invoice'];
             const ndWrap        = document.getElementById('notadebet-wrapper');
             const ndSelect      = document.getElementById('notadebet_select');
 
-            // awal
             projectSelect.disabled = true;
             afterProject.classList.add('hidden');
             ndWrap.style.display = 'none';
@@ -707,10 +646,8 @@ $invoice_id = (int)$invoice['id_invoice'];
             statusSelect.addEventListener('change', function(){
                 const val=this.value;
                 modal.classList.remove('theme-mitra','theme-pkwt');
-                if(val==='MITRA'){ modal.classList.add('theme-mitra'); badgeSurat.textContent='SURAT MITRA'; }
-                else if(val==='PKWT'){ modal.classList.add('theme-pkwt'); badgeSurat.textContent='SURAT PKWT'; }
-                else { badgeSurat.textContent=''; }
-                badgeSurat.style.display = badgeSurat.textContent ? 'inline-block' : 'none';
+                if(val==='MITRA'){ modal.classList.add('theme-mitra'); }
+                else if(val==='PKWT'){ modal.classList.add('theme-pkwt'); }
                 suratTipe.value = val || '';
 
                 projectSelect.disabled = !(val==='MITRA'||val==='PKWT');
@@ -770,7 +707,7 @@ $invoice_id = (int)$invoice['id_invoice'];
             }
 
             document.getElementById('invoiceForm').addEventListener('submit', function(e){
-                if(!statusSelect.value){ e.preventDefault(); alert('Pilih Status Karyawan terlebih dahulu.'); statusSelect.focus(); return; }
+                if(!statusSelect.value){ e.preventDefault(); alert('Pilih Status Project terlebih dahulu.'); statusSelect.focus(); return; }
                 if(!projectSelect.value){ e.preventDefault(); alert('Pilih Project setelah memilih Status.'); projectSelect.focus(); return; }
                 if(projectSelect.value.toUpperCase()==='CNAF' && !ndSelect.value){
                     e.preventDefault(); alert('Untuk project CNAF, pilih “Nota Debet?”'); ndSelect.focus(); return;
@@ -802,7 +739,6 @@ $invoice_id = (int)$invoice['id_invoice'];
                 document.getElementById('person_up_title').value='';
                 tableBody.innerHTML=''; createItemRow('');
             }
-            // reset percent items when project changes
             document.getElementById('percent-items-body').innerHTML='';
             reindexItems(); calculateTotals();
         }
